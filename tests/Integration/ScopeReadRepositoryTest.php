@@ -147,6 +147,23 @@ final class ScopeReadRepositoryTest extends TestCase
         echo "WIKI001F_MISC_BUDGET_EXEMPT=PASS\n";
     }
 
+    public function test_normal_children_search_is_bounded_to_active_direct_children(): void
+    {
+        $camry = $this->repo->normalChildren(self::TOYOTA, 0, 20, 'Cam');
+        $this->assertSame(['Camry'], array_column($camry['items'], 'label'));
+        $this->assertSame(1, $camry['total']);
+        $this->assertSame('Cam', $camry['query']);
+
+        $deep = $this->repo->normalChildren(self::TOYOTA, 0, 20, 'Brakes');
+        $this->assertSame([], array_column($deep['items'], 'label'));
+
+        $retired = $this->repo->normalChildren(self::TOYOTA, 0, 20, 'Retired');
+        $this->assertSame([], array_column($retired['items'], 'label'));
+
+        echo "WIKI001F_CHILD_SEARCH=PASS\n";
+        echo "WIKI001F_CHILD_SEARCH_DIRECT_ONLY=PASS\n";
+    }
+
     private function seedGraph(string $graph): void
     {
         $v2 = $graph === self::GRAPH_V2;
