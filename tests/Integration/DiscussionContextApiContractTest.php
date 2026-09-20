@@ -39,6 +39,37 @@ final class DiscussionContextApiContractTest extends TestCase
         $this->assertStringNotContainsString('content', $src);
     }
 
+    public function test_member_write_surfaces_require_public_rollout_in_addition_to_context_gate(): void
+    {
+        $listener = file_get_contents(dirname(__DIR__, 2) . '/src/Listener/SaveDiscussionWikiContext.php');
+        $controller = file_get_contents(dirname(__DIR__, 2) . '/src/Api/Controllers/DiscussionContextController.php');
+
+        foreach ([$listener, $controller] as $src) {
+            $this->assertStringContainsString('FeatureGates::CONTEXT_WRITES_ENABLED', $src);
+            $this->assertStringContainsString('FeatureGates::PUBLIC_ROLLOUT_ENABLED', $src);
+        }
+
+        $this->assertStringContainsString('public_rollout_disabled', $controller);
+    }
+
+    public function test_generic_serializer_never_uses_admin_ghost_preview_as_public_read_gate(): void
+    {
+        $src = file_get_contents(dirname(__DIR__, 2) . '/src/Api/Serializers/DiscussionWikiContextAttributes.php');
+
+        $this->assertStringContainsString('FeatureGates::PUBLIC_ROLLOUT_ENABLED', $src);
+        $this->assertStringNotContainsString('FeatureGates::ADMIN_GHOST_PREVIEW_ENABLED', $src);
+        $this->assertStringContainsString('Public rollout alone does not expose context', $src);
+    }
+
+    public function test_normal_tag_edits_are_checked_for_semantic_board_drift(): void
+    {
+        $listener = file_get_contents(dirname(__DIR__, 2) . '/src/Listener/SaveDiscussionWikiContext.php');
+        $service = file_get_contents(dirname(__DIR__, 2) . '/src/Context/ContextWriteService.php');
+
+        $this->assertStringContainsString('assertExistingBoardCompatible', $listener);
+        $this->assertStringContainsString('board_context_change_requires_coordinated_move', $service);
+    }
+
     public function test_service_enforces_revision_board_graph_and_relevance_guards(): void
     {
         $src = file_get_contents(dirname(__DIR__, 2) . '/src/Context/ContextWriteService.php');
