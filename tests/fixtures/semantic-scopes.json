@@ -1,0 +1,33 @@
+{
+  "schema": "flatrate.wiki.disposable_semantic_fixtures.v1",
+  "scopes": [
+    {"label": "Toyota", "path": ["Toyota"]},
+    {"label": "Camry", "path": ["Toyota", "Camry"]},
+    {"label": "XV70", "path": ["Toyota", "Camry", "XV70"]},
+    {"label": "2021", "path": ["Toyota", "Camry", "XV70", "2021"]},
+    {"label": "Brakes", "path": ["Toyota", "Camry", "XV70", "2021", "Brakes"]},
+    {"label": "Front Brake Pads", "path": ["Toyota", "Camry", "XV70", "2021", "Brakes", "Front Brake Pads"]},
+    {"label": "Labor Law", "path": ["Labor Law"]},
+    {"label": "Texas", "path": ["Labor Law", "Texas"]},
+    {"label": "Flat-Rate Compensation", "path": ["Labor Law", "Texas", "Flat-Rate Compensation"]},
+    {"label": "Unpaid Warranty Time", "path": ["Labor Law", "Texas", "Flat-Rate Compensation", "Unpaid Warranty Time"]}
+  ],
+  "discussions": [
+    {"id": "deep_toyota_primary", "primary": ["Toyota", "Camry", "XV70", "2021", "Brakes", "Front Brake Pads"], "relevance": []},
+    {"id": "labor_law_relevant_toyota", "primary": ["Labor Law"], "relevance": [["Toyota"]]},
+    {"id": "labor_law_relevant_camry", "primary": ["Labor Law"], "relevance": [["Toyota", "Camry"]]},
+    {"id": "hidden_labor_law_relevant_toyota", "primary": ["Labor Law"], "relevance": [["Toyota"]], "hidden": true},
+    {"id": "duplicate_membership_defense", "primary": ["Toyota"], "relevance": [["Toyota"]], "expect_once": true}
+  ],
+  "preview_fixtures": [
+    "all_discussions_root",
+    "toyota_root",
+    "deep_toyota_scope",
+    "labor_law_texas_scope",
+    "labor_law_relevant_to_toyota",
+    "catch_all_scope",
+    "overflow_more_view_all",
+    "hidden_discussion_visibility"
+  ],
+  "qualification_deferred_to": "disposable_extension_qualification"
+}

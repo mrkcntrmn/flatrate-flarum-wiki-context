@@ -1,0 +1,8 @@
+flatrate-wiki-context:
+  forum:
+    preview:
+      banner_title: "ADMIN GHOST PREVIEW"
+      not_visible: "Not visible to members"
+      read_only: "Read-only"
+      audience: "Audience: {audience}"
+      graph: "Graph: {graph}"
