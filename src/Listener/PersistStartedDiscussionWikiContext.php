@@ -5,6 +5,8 @@ namespace FlatRate\WikiContext\Listener;
 use FlatRate\WikiContext\Context\ContextWriteException;
 use FlatRate\WikiContext\Context\ContextWriteService;
 use FlatRate\WikiContext\Context\PendingContextWrite;
+use FlatRate\WikiContext\Projection\SettingsReader;
+use FlatRate\WikiContext\Support\FeatureGates;
 use Flarum\Discussion\Event\Started;
 use Flarum\Foundation\ValidationException;
 use Flarum\User\Exception\PermissionDeniedException;
@@ -15,8 +17,10 @@ use Flarum\User\Exception\PermissionDeniedException;
  */
 final class PersistStartedDiscussionWikiContext
 {
-    public function __construct(private ContextWriteService $writes)
-    {
+    public function __construct(
+        private ContextWriteService $writes,
+        private SettingsReader $settings
+    ) {
     }
 
     public function handle(Started $event): void
@@ -30,6 +34,14 @@ final class PersistStartedDiscussionWikiContext
         $pending = $discussion->getRelation(CaptureDiscussionWikiContext::PENDING_RELATION);
         if (!$pending instanceof PendingContextWrite) {
             return;
+        }
+
+        if (
+            !$this->settings->bool(FeatureGates::CONTEXT_WRITES_ENABLED)
+            || !$this->settings->bool(FeatureGates::PUBLIC_ROLLOUT_ENABLED)
+        ) {
+            $discussion->delete();
+            throw new PermissionDeniedException;
         }
 
         try {
