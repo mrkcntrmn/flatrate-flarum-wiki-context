@@ -27,19 +27,43 @@ final class SaveDiscussionWikiContext
         $hasContext = array_key_exists('flatRateWikiContext', $attributes);
         $hasRelevance = array_key_exists('flatRateWikiRelevance', $attributes);
 
+        $tagsChanged = array_key_exists('tags', (array) ($event->data['relationships'] ?? []));
+
+        if ($event->discussion->exists) {
+            if ($hasContext || $hasRelevance) {
+                throw new ValidationException([
+                    'flatRateWikiContext' => 'wiki_context_update_requires_context_endpoint',
+                ]);
+            }
+
+            if ($tagsChanged) {
+                try {
+                    $this->writes->assertExistingBoardCompatible(
+                        (int) $event->discussion->id,
+                        $this->extractRequestedTagIds($event->data)
+                    );
+                } catch (ContextWriteException $e) {
+                    if ($e->httpStatus === 409) {
+                        throw new ConflictException($e->reason);
+                    }
+
+                    throw new ValidationException([
+                        'tags' => $e->reason,
+                    ]);
+                }
+            }
+
+            return;
+        }
+
         if (!$hasContext && !$hasRelevance) {
             return;
         }
 
-        // WIKI-001D only accepts semantic payload on normal discussion create.
-        // Later corrections go through the dedicated context-only endpoint.
-        if ($event->discussion->exists) {
-            throw new ValidationException([
-                'flatRateWikiContext' => 'wiki_context_update_requires_context_endpoint',
-            ]);
-        }
-
-        if (!$this->settings->bool(FeatureGates::CONTEXT_WRITES_ENABLED)) {
+        if (
+            !$this->settings->bool(FeatureGates::CONTEXT_WRITES_ENABLED)
+            || !$this->settings->bool(FeatureGates::PUBLIC_ROLLOUT_ENABLED)
+        ) {
             throw new PermissionDeniedException;
         }
 
