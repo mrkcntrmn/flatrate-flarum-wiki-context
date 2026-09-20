@@ -34,14 +34,24 @@ final class ScopeChildrenController implements RequestHandlerInterface
             return $this->notFound('wiki_scope_not_found');
         }
 
-        $query = $request->getQueryParams();
-        $page = isset($query['page']) && is_array($query['page']) ? $query['page'] : [];
-        $offset = isset($page['offset']) && is_numeric($page['offset']) ? max(0, (int) $page['offset']) : 0;
+        $queryParams = $request->getQueryParams();
+        $page = isset($queryParams['page']) && is_array($queryParams['page'])
+            ? $queryParams['page']
+            : [];
+
+        $offset = isset($page['offset']) && is_numeric($page['offset'])
+            ? max(0, (int) $page['offset'])
+            : 0;
+
         $limit = isset($page['limit']) && is_numeric($page['limit'])
             ? (int) $page['limit']
             : DirectoryDisplayPolicy::DESKTOP_INLINE_MAX;
 
-        $result = $this->scopes->normalChildren($scopeUuid, $offset, $limit);
+        $query = isset($queryParams['q']) && is_scalar($queryParams['q'])
+            ? (string) $queryParams['q']
+            : null;
+
+        $result = $this->scopes->normalChildren($scopeUuid, $offset, $limit, $query);
         $catchAll = $this->scopes->catchAllChild($scopeUuid);
 
         $data = [];
@@ -67,6 +77,8 @@ final class ScopeChildrenController implements RequestHandlerInterface
                 'offset' => $result['offset'],
                 'limit' => $result['limit'],
                 'hasMore' => $result['has_more'],
+                'query' => $result['query'],
+                'searchable' => true,
                 'indexable' => false,
                 'inSitemap' => false,
             ],
