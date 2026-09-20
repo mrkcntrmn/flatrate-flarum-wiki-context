@@ -47,7 +47,14 @@ final class BrowseRouteGateMiddlewareTest extends TestCase
             $this->assertSame(404, $response->getStatusCode());
         }
 
+        $malformed = $this->middleware(false, false, false)->process(
+            (new ServerRequestFactory())->createServerRequest('GET', '/browse/not-a-uuid'),
+            $this->okHandler()
+        );
+        $this->assertSame(404, $malformed->getStatusCode());
+
         echo "WIKI001F_PUBLIC_ROUTE_GATE_FAIL_CLOSED=PASS\n";
+        echo "WIKI001F_MALFORMED_ROUTE_GATE_FAIL_CLOSED=PASS\n";
         echo "WIKI001F_GHOST_PREVIEW_NOT_PUBLIC_BYPASS=PASS\n";
     }
 
