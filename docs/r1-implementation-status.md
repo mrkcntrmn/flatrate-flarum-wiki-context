@@ -10,6 +10,11 @@ Work order: `WIKI-001C-FLARUM-WIKI-CONTEXT-SKELETON-R1`
 - Projection HMAC/nonce/route contract helpers
 - Projection stage/chunk/validate/activate service skeleton + API routes
 - Wiki-scope filter registration (`filter[wiki-scope]`)
+- WIKI-001D primary context + bounded relevance persistence
+- WIKI-001D optimistic revision / 409 correction path
+- WIKI-001D board-drift guard + audit/provenance
+- WIKI-001E public feed dual-gate fail-closed enforcement
+- WIKI-001E active-projection semantic membership query
 - Preview acceptance schema + freshness helper
 - Directory display + catch-all policy constants
 - CLI command skeletons (status/reconcile/rollback/backfill/preview-*)
@@ -27,7 +32,8 @@ Work order: `WIKI-001C-FLARUM-WIKI-CONTEXT-SKELETON-R1`
 - Preview-accept fixtures/validation
 - Public serializers hydration from DB
 - Browse forum routes (`/browse/<scope-uuid>`)
-- Context write path + 409 conflict enforcement at HTTP layer
+- WIKI-001E exact-head CI/disposable acceptance
+- Full WIKI-001E native Flarum Latest/Top/pagination qualification
 - Ghost-preview audience-simulated query execution
 
 ## DEFERRED
@@ -36,5 +42,5 @@ Work order: `WIKI-001C-FLARUM-WIKI-CONTEXT-SKELETON-R1`
 - PRODUCTION_PROJECTION_SYNC / PUBLIC_BROWSE_ENABLE / MEMBER_CONTEXT_WRITES
 - PUBLIC_DERIVED_FEEDS / BRAND_FEED_CUTOVER / PUBLIC_ROLLOUT
 - LABOR_LAW_PUBLIC_ROLLOUT / PACKAGIST_STABLE_RELEASE
-- End-to-end disposable semantic filter qualification (Latest + Top)
+- Production WIKI-001E feed enablement / public cutover
 - Admin ghost-preview fixture execution as guest/standard_member
