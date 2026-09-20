@@ -5,10 +5,10 @@ namespace FlatRate\WikiContext\Api\Controllers;
 use FlatRate\WikiContext\Context\ContextWriteException;
 use FlatRate\WikiContext\Context\ContextWriteService;
 use FlatRate\WikiContext\Context\WikiContextDto;
+use FlatRate\WikiContext\Projection\SettingsReader;
 use FlatRate\WikiContext\Support\FeatureGates;
 use Flarum\Discussion\Discussion;
 use Flarum\Http\RequestUtil;
-use Flarum\Settings\SettingsRepositoryInterface;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -24,13 +24,13 @@ final class DiscussionContextController implements RequestHandlerInterface
 {
     public function __construct(
         private ContextWriteService $writes,
-        private SettingsRepositoryInterface $settings
+        private SettingsReader $settings
     ) {
     }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        if (!(bool) $this->settings->get(FeatureGates::CONTEXT_WRITES_ENABLED)) {
+        if (!$this->settings->bool(FeatureGates::CONTEXT_WRITES_ENABLED)) {
             return $this->error(403, 'context_writes_disabled');
         }
 
