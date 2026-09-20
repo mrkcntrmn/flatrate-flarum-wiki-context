@@ -41,7 +41,8 @@ final class ScopeChildrenController implements RequestHandlerInterface
             ? (int) $page['limit']
             : DirectoryDisplayPolicy::DESKTOP_INLINE_MAX;
 
-        $result = $this->scopes->children($scopeUuid, $offset, $limit);
+        $result = $this->scopes->normalChildren($scopeUuid, $offset, $limit);
+        $catchAll = $this->scopes->catchAllChild($scopeUuid);
 
         $data = [];
         foreach ($result['items'] as $scope) {
@@ -60,7 +61,9 @@ final class ScopeChildrenController implements RequestHandlerInterface
             'meta' => [
                 'directoryDisplayPolicy' => DirectoryDisplayPolicy::contract(),
                 'directChildrenOnly' => true,
-                'total' => $result['total'],
+                'totalNormal' => $result['total'],
+                'totalWithCatchAll' => $result['total'] + ($catchAll === null ? 0 : 1),
+                'catchAll' => $catchAll,
                 'offset' => $result['offset'],
                 'limit' => $result['limit'],
                 'hasMore' => $result['has_more'],
