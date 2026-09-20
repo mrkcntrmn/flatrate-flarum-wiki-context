@@ -7,8 +7,11 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const index = readFileSync(join(HERE, '../src/forum/index.js'), 'utf8');
 
-test('forum shell does not enable incomplete public UI', () => {
+test('forum shell registers only the accepted WIKI-001F browse routes', () => {
   assert.match(index, /flatrate-wiki-context/);
-  assert.match(index, /fail-closed/i);
-  assert.doesNotMatch(index, /app\.routes\.browse\s*=/);
+  assert.match(index, /server-side middleware remains authoritative/i);
+  assert.match(index, /flatrate-wiki\.browse/);
+  assert.match(index, /path: '\/browse\/:id'/);
+  assert.match(index, /path: '\/browse\/:id\/:slug'/);
+  assert.doesNotMatch(index, /adminGhostPreview.*component/i);
 });
