@@ -182,7 +182,7 @@ final class WikiScopeFilterQueryTest extends TestCase
         bool $negate = false,
         bool $derivedEnabled = true,
         bool $publicEnabled = true,
-        ?string $sortColumn = 'id',
+        ?string $sortColumn = null,
         ?int $limit = null,
         int $offset = 0,
         bool $applyVisibility = true
@@ -200,6 +200,8 @@ final class WikiScopeFilterQueryTest extends TestCase
 
         if ($sortColumn !== null) {
             $query->orderByDesc($sortColumn)->orderBy('id');
+        } else {
+            $query->orderBy('id');
         }
 
         if ($limit !== null) {
