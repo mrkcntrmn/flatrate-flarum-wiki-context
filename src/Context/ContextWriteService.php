@@ -152,7 +152,7 @@ final class ContextWriteService
             $provenance = ContextWritePolicy::provenanceFor($discussionOwnerId, $actorId);
             $now = date('Y-m-d H:i:s');
 
-            $this->db->table('flatrate_wiki_discussion_context')
+            $updated = $this->db->table('flatrate_wiki_discussion_context')
                 ->where('discussion_id', $discussionId)
                 ->where('context_revision', $currentRevision)
                 ->update([
@@ -162,6 +162,10 @@ final class ContextWriteService
                     'assigned_by_user_id' => $actorId ?: null,
                     'updated_at' => $now,
                 ]);
+
+            if ($updated !== 1) {
+                throw new ContextWriteException('context_revision_conflict', 409);
+            }
 
             $toRemove = array_values(array_diff($currentRelevance, $desiredRelevance));
             $toAdd = array_values(array_diff($desiredRelevance, $currentRelevance));
