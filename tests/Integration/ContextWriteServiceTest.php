@@ -303,6 +303,23 @@ final class ContextWriteServiceTest extends TestCase
         $this->assertSame(1, $state['contextRevision']);
     }
 
+    public function test_existing_context_blocks_cross_board_tag_drift_but_legacy_discussion_is_unchanged(): void
+    {
+        $service = $this->service(true);
+        $service->createInitial(10, 7, 7, $this->dto(self::TOYOTA_CAMRY), [1]);
+
+        // Same top-level board remains valid.
+        $service->assertExistingBoardCompatible(10, [1, 3]);
+
+        $this->expectWriteError('board_context_change_requires_coordinated_move', function () use ($service) {
+            $service->assertExistingBoardCompatible(10, [2]);
+        });
+
+        // No semantic row means old/legacy Flarum behavior is preserved.
+        $service->assertExistingBoardCompatible(99, [2]);
+        $this->assertTrue(true);
+    }
+
     public function test_moderator_assignment_provenance_is_server_derived(): void
     {
         $service = $this->service(true);
