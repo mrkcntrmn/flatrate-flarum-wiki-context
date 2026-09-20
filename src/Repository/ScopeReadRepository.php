@@ -69,19 +69,42 @@ final class ScopeReadRepository
         return (int) $this->childrenQuery($scopeUuid)->count();
     }
 
+    public function normalChildCount(string $scopeUuid): int
+    {
+        return (int) $this->normalChildrenQuery($scopeUuid)->count();
+    }
+
     /**
+     * Catch-all is a semantic child but not part of normal-child display
+     * budgets. It is retrieved independently so pagination can never hide it.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function catchAllChild(string $scopeUuid): ?array
+    {
+        $row = $this->childrenQuery($scopeUuid)
+            ->where('s.is_catch_all', true)
+            ->orderBy('s.display_label')
+            ->orderBy('s.scope_uuid')
+            ->first($this->publicColumns());
+
+        return $row ? $this->publicScope($row) : null;
+    }
+
+    /**
+     * Paginate normal direct children only. Catch-all is returned separately.
+     *
      * @return array{items:list<array<string,mixed>>,total:int,offset:int,limit:int,has_more:bool}
      */
-    public function children(string $scopeUuid, int $offset, int $limit): array
+    public function normalChildren(string $scopeUuid, int $offset, int $limit): array
     {
         $offset = max(0, $offset);
         $limit = max(1, min(50, $limit));
 
-        $base = $this->childrenQuery($scopeUuid);
+        $base = $this->normalChildrenQuery($scopeUuid);
         $total = (int) (clone $base)->count();
 
         $rows = $base
-            ->orderBy('s.is_catch_all')
             ->orderBy('s.display_label')
             ->orderBy('s.scope_uuid')
             ->offset($offset)
@@ -116,6 +139,12 @@ final class ScopeReadRepository
     {
         return $this->activeScopes()
             ->where('s.primary_parent_scope_uuid', strtolower($scopeUuid));
+    }
+
+    private function normalChildrenQuery(string $scopeUuid): Builder
+    {
+        return $this->childrenQuery($scopeUuid)
+            ->where('s.is_catch_all', false);
     }
 
     /**
