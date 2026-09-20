@@ -6,25 +6,32 @@ use PHPUnit\Framework\TestCase;
 
 final class DiscussionContextApiContractTest extends TestCase
 {
-    public function test_create_fields_are_structured_create_only_and_not_model_properties(): void
+    public function test_create_payload_is_captured_from_flarum_1_8_saving_event_without_api_resource_extender(): void
     {
-        $src = file_get_contents(dirname(__DIR__, 2) . '/src/Api/DiscussionWikiContextFields.php');
+        $capture = file_get_contents(dirname(__DIR__, 2) . '/src/Listener/CaptureDiscussionWikiContext.php');
+        $extend = file_get_contents(dirname(__DIR__, 2) . '/extend.php');
 
-        $this->assertStringContainsString("Schema\\Arr::make('flatRateWikiContext')", $src);
-        $this->assertStringContainsString("Schema\\Arr::make('flatRateWikiRelevance')", $src);
-        $this->assertSame(2, substr_count($src, '->writableOnCreate()'));
-        $this->assertSame(2, substr_count($src, '->visible(false)'));
-        $this->assertSame(2, substr_count($src, '=> null'));
+        $this->assertStringContainsString("flatRateWikiContext", $capture);
+        $this->assertStringContainsString("flatRateWikiRelevance", $capture);
+        $this->assertStringContainsString("setRelation(", $capture);
+        $this->assertStringContainsString("PENDING_RELATION", $capture);
+        $this->assertStringNotContainsString("ApiResource", $extend);
+        $this->assertFileDoesNotExist(dirname(__DIR__, 2) . '/src/Api/DiscussionWikiContextFields.php');
     }
 
-    public function test_create_hook_uses_after_save_and_never_accepts_normal_update_path(): void
+    public function test_create_uses_saving_validation_then_started_persistence(): void
     {
-        $src = file_get_contents(dirname(__DIR__, 2) . '/src/Listener/SaveDiscussionWikiContext.php');
+        $capture = file_get_contents(dirname(__DIR__, 2) . '/src/Listener/CaptureDiscussionWikiContext.php');
+        $persist = file_get_contents(dirname(__DIR__, 2) . '/src/Listener/PersistStartedDiscussionWikiContext.php');
 
-        $this->assertStringContainsString('$event->discussion->afterSave', $src);
-        $this->assertStringContainsString('wiki_context_update_requires_context_endpoint', $src);
-        $this->assertStringContainsString('ContextWriteService', $src);
-        $this->assertStringContainsString('CONTEXT_WRITES_ENABLED', $src);
+        $this->assertStringContainsString('prepareInitial', $capture);
+        $this->assertStringContainsString('wiki_context_update_requires_context_endpoint', $capture);
+        $this->assertStringNotContainsString('afterSave(', $capture);
+
+        $this->assertStringContainsString('persistInitialValidated', $persist);
+        $this->assertStringContainsString('$discussion->delete()', $persist);
+        $this->assertStringContainsString('CONTEXT_WRITES_ENABLED', $persist);
+        $this->assertStringContainsString('PUBLIC_ROLLOUT_ENABLED', $persist);
     }
 
     public function test_correction_endpoint_is_context_only_and_revision_service_backed(): void
@@ -35,13 +42,14 @@ final class DiscussionContextApiContractTest extends TestCase
         $this->assertStringContainsString("assertCan('tag'", $src);
         $this->assertStringContainsString('full_context_state_required', $src);
         $this->assertStringContainsString('$this->writes->correct', $src);
-        $this->assertStringNotContainsString('title', $src);
-        $this->assertStringNotContainsString('content', $src);
+        $this->assertStringNotContainsString('$discussion->title', $src);
+        $this->assertStringNotContainsString('->rename(', $src);
+        $this->assertStringNotContainsString('PostReply', $src);
     }
 
     public function test_member_write_surfaces_require_public_rollout_in_addition_to_context_gate(): void
     {
-        $listener = file_get_contents(dirname(__DIR__, 2) . '/src/Listener/SaveDiscussionWikiContext.php');
+        $listener = file_get_contents(dirname(__DIR__, 2) . '/src/Listener/CaptureDiscussionWikiContext.php');
         $controller = file_get_contents(dirname(__DIR__, 2) . '/src/Api/Controllers/DiscussionContextController.php');
 
         foreach ([$listener, $controller] as $src) {
@@ -63,7 +71,7 @@ final class DiscussionContextApiContractTest extends TestCase
 
     public function test_normal_tag_edits_are_checked_for_semantic_board_drift(): void
     {
-        $listener = file_get_contents(dirname(__DIR__, 2) . '/src/Listener/SaveDiscussionWikiContext.php');
+        $listener = file_get_contents(dirname(__DIR__, 2) . '/src/Listener/CaptureDiscussionWikiContext.php');
         $service = file_get_contents(dirname(__DIR__, 2) . '/src/Context/ContextWriteService.php');
 
         $this->assertStringContainsString('assertExistingBoardCompatible', $listener);
