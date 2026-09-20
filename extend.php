@@ -30,13 +30,16 @@ use FlatRate\WikiContext\Command\ProjectionStatusCommand;
 use FlatRate\WikiContext\Filter\WikiScopeFilter;
 use FlatRate\WikiContext\Listener\CaptureDiscussionWikiContext;
 use FlatRate\WikiContext\Listener\PersistStartedDiscussionWikiContext;
+use FlatRate\WikiContext\Middleware\BrowseRouteGateMiddleware;
 use FlatRate\WikiContext\Middleware\ProjectionHmacMiddleware;
 use FlatRate\WikiContext\Support\FeatureGates;
 
 return [
     (new Extend\Frontend('forum'))
         ->js(__DIR__ . '/js/dist/forum.js')
-        ->css(__DIR__ . '/resources/less/forum.less'),
+        ->css(__DIR__ . '/resources/less/forum.less')
+        ->route('/browse/{id}', 'flatrate.wiki.browse')
+        ->route('/browse/{id}/{slug}', 'flatrate.wiki.browse.slug'),
 
     new Extend\Locales(__DIR__ . '/resources/locale'),
 
@@ -68,6 +71,9 @@ return [
 
     (new Extend\Middleware('api'))
         ->add(ProjectionHmacMiddleware::class),
+
+    (new Extend\Middleware('forum'))
+        ->add(BrowseRouteGateMiddleware::class),
 
     (new Extend\Event())
         ->listen(DiscussionSaving::class, CaptureDiscussionWikiContext::class)
