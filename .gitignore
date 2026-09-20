@@ -1,0 +1,12 @@
+/vendor/
+composer.phar
+.DS_Store
+Thumbs.db
+node_modules/
+js/node_modules/
+.idea/
+.phpunit.result.cache
+composer.lock
+/artifacts/
+/tmp/
+*.sqlite

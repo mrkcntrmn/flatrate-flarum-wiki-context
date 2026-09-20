@@ -1,0 +1,2 @@
+(()=>{const e={n:t=>{const o=t&&t.__esModule?()=>t.default:()=>t;return e.d(o,{a:o}),o},d:(t,o)=>{for(var n in o)e.o(o,n)&&!e.o(t,n)&&Object.defineProperty(t,n,{enumerable:!0,get:o[n]})},o:(e,t)=>Object.prototype.hasOwnProperty.call(e,t)};(()=>{"use strict";const t=flarum.core.compat["forum/app"];e.n(t)().initializers.add("flatrate-wiki-context",function(){"undefined"!=typeof console&&console.debug&&console.debug("[flatrate-wiki-context] initializer registered (gates fail-closed)")})})(),module.exports={}})();
+//# sourceMappingURL=forum.js.map

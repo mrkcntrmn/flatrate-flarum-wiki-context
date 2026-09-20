@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "name": "flatrate-flarum-wiki-context",
+  "dependencies": {
+    "flarum-webpack-config": "^2.0.2",
+    "webpack": "^5.93.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "scripts": {
+    "dev": "webpack --mode development --watch",
+    "build": "webpack --mode production"
+  },
+  "devDependencies": {
+    "flarum-tsconfig": "^1.0.2"
+  }
+}
