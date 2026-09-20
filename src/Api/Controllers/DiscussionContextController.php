@@ -34,6 +34,10 @@ final class DiscussionContextController implements RequestHandlerInterface
             return $this->error(403, 'context_writes_disabled');
         }
 
+        if (!$this->settings->bool(FeatureGates::PUBLIC_ROLLOUT_ENABLED)) {
+            return $this->error(403, 'public_rollout_disabled');
+        }
+
         $params = $request->getAttribute('routeParameters') ?? [];
         $id = $params['id'] ?? $request->getAttribute('id');
         if (!is_numeric($id)) {
