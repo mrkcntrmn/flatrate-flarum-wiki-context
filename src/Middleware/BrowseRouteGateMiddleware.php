@@ -25,7 +25,7 @@ final class BrowseRouteGateMiddleware implements MiddlewareInterface
     {
         $path = $request->getUri()->getPath();
 
-        if (!preg_match('~^/browse/[0-9a-fA-F-]+(?:/[^/]+)?/?$~', $path)) {
+        if (!preg_match('~^/browse(?:/|$)~', $path)) {
             return $handler->handle($request);
         }
 
