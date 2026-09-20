@@ -95,6 +95,34 @@ final class ContextWriteService
     }
 
     /**
+     * Protect semantic/Flarum board alignment when ordinary tag edits occur.
+     *
+     * Legacy discussions without semantic context remain unaffected. Cross-board
+     * moves require a future coordinated operation that updates both authorities.
+     *
+     * @param list<int> $requestedTagIds
+     */
+    public function assertExistingBoardCompatible(int $discussionId, array $requestedTagIds): void
+    {
+        $current = $this->contexts->find($discussionId);
+        if ($current === null) {
+            return;
+        }
+
+        $currentPrimary = $this->scopes->find((string) $current->primary_scope_uuid);
+        if ($currentPrimary === null) {
+            throw new ContextWriteException('current_primary_scope_not_active', 409);
+        }
+
+        $boardSlugs = $this->contexts->requestedPrimaryBoardSlugs($requestedTagIds);
+        $requiredBoard = (string) ($currentPrimary->owning_board_key ?? '');
+
+        if ($requiredBoard === '' || !in_array($requiredBoard, $boardSlugs, true)) {
+            throw new ContextWriteException('board_context_change_requires_coordinated_move', 409);
+        }
+    }
+
+    /**
      * Full-state same-board correction with optimistic concurrency.
      *
      * @return array<string,mixed>
