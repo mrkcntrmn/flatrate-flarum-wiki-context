@@ -1,17 +1,20 @@
 import app from 'flarum/forum/app';
+import BrowsePage from './components/BrowsePage';
 
 /**
- * FlatRate Wiki Context forum shell.
+ * WIKI-001F public browse routes.
  *
- * Incomplete WIKI UI must NOT be visible to ordinary users.
- * Public rollout and browse routes remain fail-closed server-side.
- * Ghost-preview shares the same components under admin-only mode (WIKI-001P).
+ * Server-side middleware remains authoritative. Registering the client route
+ * does not open access while browse/public rollout gates are closed.
  */
 app.initializers.add('flatrate-wiki-context', () => {
-  // Skeleton: register future browse route, directory, breadcrumb, preview banner,
-  // audience selector, and context display only when server gates allow.
-  // No member-visible incomplete UI in R1.
-  if (typeof console !== 'undefined' && console.debug) {
-    console.debug('[flatrate-wiki-context] initializer registered (gates fail-closed)');
-  }
+  app.routes['flatrate-wiki.browse'] = {
+    path: '/browse/:id',
+    component: BrowsePage,
+  };
+
+  app.routes['flatrate-wiki.browse.slug'] = {
+    path: '/browse/:id/:slug',
+    component: BrowsePage,
+  };
 });
