@@ -5,11 +5,11 @@ namespace FlatRate\WikiContext\Listener;
 use FlatRate\WikiContext\Context\ContextWriteException;
 use FlatRate\WikiContext\Context\ContextWriteService;
 use FlatRate\WikiContext\Context\WikiContextDto;
+use FlatRate\WikiContext\Projection\SettingsReader;
 use FlatRate\WikiContext\Support\FeatureGates;
 use Flarum\Discussion\Discussion;
 use Flarum\Discussion\Event\Saving;
 use Flarum\Foundation\ValidationException;
-use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\Exception\PermissionDeniedException;
 use Tobyz\JsonApiServer\Exception\ConflictException;
 
@@ -17,7 +17,7 @@ final class SaveDiscussionWikiContext
 {
     public function __construct(
         private ContextWriteService $writes,
-        private SettingsRepositoryInterface $settings
+        private SettingsReader $settings
     ) {
     }
 
@@ -39,7 +39,7 @@ final class SaveDiscussionWikiContext
             ]);
         }
 
-        if (!(bool) $this->settings->get(FeatureGates::CONTEXT_WRITES_ENABLED)) {
+        if (!$this->settings->bool(FeatureGates::CONTEXT_WRITES_ENABLED)) {
             throw new PermissionDeniedException;
         }
 
