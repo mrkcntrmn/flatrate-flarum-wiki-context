@@ -11,11 +11,6 @@ final class ScopeReadRepository
     {
     }
 
-    /**
-     * Return one active scope from the currently active projection.
-     *
-     * @return array<string,mixed>|null
-     */
     public function findActive(string $scopeUuid): ?array
     {
         $row = $this->activeScopes()
@@ -25,15 +20,11 @@ final class ScopeReadRepository
         return $row ? $this->publicScope($row) : null;
     }
 
-    /**
-     * Root-to-current breadcrumb using only the active projection closure.
-     *
-     * @return list<array<string,mixed>>
-     */
     public function breadcrumbs(string $scopeUuid): array
     {
         $scopeUuid = strtolower($scopeUuid);
         $target = $this->findActive($scopeUuid);
+
         if ($target === null) {
             return [];
         }
@@ -59,6 +50,7 @@ final class ScopeReadRepository
         foreach ($rows as $row) {
             $breadcrumbs[] = $this->publicScope($row);
         }
+
         $breadcrumbs[] = $target;
 
         return $breadcrumbs;
@@ -74,12 +66,6 @@ final class ScopeReadRepository
         return (int) $this->normalChildrenQuery($scopeUuid)->count();
     }
 
-    /**
-     * Catch-all is a semantic child but not part of normal-child display
-     * budgets. It is retrieved independently so pagination can never hide it.
-     *
-     * @return array<string,mixed>|null
-     */
     public function catchAllChild(string $scopeUuid): ?array
     {
         $row = $this->childrenQuery($scopeUuid)
@@ -92,16 +78,29 @@ final class ScopeReadRepository
     }
 
     /**
-     * Paginate normal direct children only. Catch-all is returned separately.
+     * Paginate/search normal direct children only.
+     * Catch-all is returned separately so it never consumes the normal budget.
      *
-     * @return array{items:list<array<string,mixed>>,total:int,offset:int,limit:int,has_more:bool}
+     * @return array{items:list<array<string,mixed>>,total:int,offset:int,limit:int,has_more:bool,query:string}
      */
-    public function normalChildren(string $scopeUuid, int $offset, int $limit): array
-    {
+    public function normalChildren(
+        string $scopeUuid,
+        int $offset,
+        int $limit,
+        ?string $query = null
+    ): array {
         $offset = max(0, $offset);
         $limit = max(1, min(50, $limit));
+        $query = trim((string) $query);
+        $query = function_exists('mb_substr') ? mb_substr($query, 0, 64) : substr($query, 0, 64);
 
         $base = $this->normalChildrenQuery($scopeUuid);
+
+        if ($query !== '') {
+            $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $query);
+            $base->where('s.display_label', 'like', '%' . $escaped . '%');
+        }
+
         $total = (int) (clone $base)->count();
 
         $rows = $base
@@ -122,6 +121,7 @@ final class ScopeReadRepository
             'offset' => $offset,
             'limit' => $limit,
             'has_more' => ($offset + count($items)) < $total,
+            'query' => $query,
         ];
     }
 
@@ -147,9 +147,6 @@ final class ScopeReadRepository
             ->where('s.is_catch_all', false);
     }
 
-    /**
-     * @return list<string>
-     */
     private function publicColumns(): array
     {
         return [
@@ -164,9 +161,6 @@ final class ScopeReadRepository
         ];
     }
 
-    /**
-     * @return array<string,mixed>
-     */
     private function publicScope(object $row): array
     {
         return [
