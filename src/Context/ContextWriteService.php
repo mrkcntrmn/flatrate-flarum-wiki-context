@@ -20,8 +20,24 @@ final class ContextWriteService
     }
 
     /**
-     * Initial assignment. Intended to execute from Discussion::afterSave while
-     * Flarum's discussion-create transaction is still open.
+     * Validate a requested initial semantic assignment before Flarum persists
+     * the new discussion. No semantic rows are written here.
+     *
+     * @param list<int> $requestedTagIds
+     */
+    public function prepareInitial(
+        WikiContextDto $dto,
+        array $requestedTagIds
+    ): ValidatedContextWrite {
+        $this->assertWriteGate();
+
+        $boardSlugs = $this->contexts->requestedPrimaryBoardSlugs($requestedTagIds);
+
+        return $this->validateDesiredState($dto, $boardSlugs);
+    }
+
+    /**
+     * Convenience path used by direct service tests/tooling.
      *
      * @param list<int> $requestedTagIds
      * @return array<string,mixed>
@@ -33,65 +49,92 @@ final class ContextWriteService
         WikiContextDto $dto,
         array $requestedTagIds
     ): array {
+        return $this->persistInitialValidated(
+            $discussionId,
+            $discussionOwnerId,
+            $actorId,
+            $this->prepareInitial($dto, $requestedTagIds)
+        );
+    }
+
+    /**
+     * Persist an already-validated initial assignment after Flarum has
+     * successfully created the discussion's first post.
+     *
+     * @return array<string,mixed>
+     */
+    public function persistInitialValidated(
+        int $discussionId,
+        int $discussionOwnerId,
+        int $actorId,
+        ValidatedContextWrite $validated
+    ): array {
         $this->assertWriteGate();
 
-        if ($this->contexts->find($discussionId) !== null) {
-            throw new ContextWriteException('context_already_exists', 409);
-        }
+        return $this->db->transaction(function () use (
+            $discussionId,
+            $discussionOwnerId,
+            $actorId,
+            $validated
+        ) {
+            if ($this->contexts->find($discussionId, true) !== null) {
+                throw new ContextWriteException('context_already_exists', 409);
+            }
 
-        $boardSlugs = $this->contexts->requestedPrimaryBoardSlugs($requestedTagIds);
-        $validated = $this->validateDesiredState($dto, $boardSlugs);
-        $provenance = ContextWritePolicy::provenanceFor($discussionOwnerId, $actorId);
-        $now = date('Y-m-d H:i:s');
+            $this->assertValidatedStateStillActive($validated);
 
-        $this->db->table('flatrate_wiki_discussion_context')->insert([
-            'discussion_id' => $discussionId,
-            'primary_scope_uuid' => $validated->primaryScopeUuid,
-            'context_revision' => 1,
-            'provenance' => $provenance,
-            'assigned_by_user_id' => $actorId ?: null,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+            $provenance = ContextWritePolicy::provenanceFor($discussionOwnerId, $actorId);
+            $now = date('Y-m-d H:i:s');
 
-        foreach ($validated->relevanceScopeUuids as $scopeUuid) {
-            $this->db->table('flatrate_wiki_discussion_relevance')->insert([
+            $this->db->table('flatrate_wiki_discussion_context')->insert([
                 'discussion_id' => $discussionId,
-                'relevant_scope_uuid' => $scopeUuid,
+                'primary_scope_uuid' => $validated->primaryScopeUuid,
+                'context_revision' => 1,
                 'provenance' => $provenance,
-                'actor_id' => $actorId ?: null,
+                'assigned_by_user_id' => $actorId ?: null,
                 'created_at' => $now,
-                'removed_at' => null,
+                'updated_at' => $now,
             ]);
+
+            foreach ($validated->relevanceScopeUuids as $scopeUuid) {
+                $this->db->table('flatrate_wiki_discussion_relevance')->insert([
+                    'discussion_id' => $discussionId,
+                    'relevant_scope_uuid' => $scopeUuid,
+                    'provenance' => $provenance,
+                    'actor_id' => $actorId ?: null,
+                    'created_at' => $now,
+                    'removed_at' => null,
+                ]);
+
+                $this->audit(
+                    $discussionId,
+                    $actorId,
+                    'relevance_added',
+                    null,
+                    $validated->primaryScopeUuid,
+                    $scopeUuid,
+                    null,
+                    1,
+                    $provenance,
+                    $validated->graphVersionUuid
+                );
+            }
 
             $this->audit(
                 $discussionId,
                 $actorId,
-                'relevance_added',
+                'primary_assigned',
                 null,
                 $validated->primaryScopeUuid,
-                $scopeUuid,
+                null,
                 null,
                 1,
                 $provenance,
                 $validated->graphVersionUuid
             );
-        }
 
-        $this->audit(
-            $discussionId,
-            $actorId,
-            'primary_assigned',
-            null,
-            $validated->primaryScopeUuid,
-            null,
-            null,
-            1,
-            $provenance,
-            $validated->graphVersionUuid
-        );
-
-        return $this->state($discussionId);
+            return $this->state($discussionId);
+        });
     }
 
     /**
@@ -393,6 +436,34 @@ final class ContextWriteService
             $primaryBoard,
             $normalizedRelevance
         );
+    }
+
+    private function assertValidatedStateStillActive(ValidatedContextWrite $validated): void
+    {
+        $primary = $this->scopes->find($validated->primaryScopeUuid);
+
+        if (
+            $primary === null
+            || !(bool) $primary->discussion_capable
+            || strtolower((string) $primary->graph_version_uuid) !== $validated->graphVersionUuid
+            || strtolower((string) $primary->community_uuid) !== $validated->communityUuid
+            || (string) $primary->owning_board_key !== $validated->owningBoardKey
+        ) {
+            throw new ContextWriteException('validated_context_became_stale', 409);
+        }
+
+        foreach ($validated->relevanceScopeUuids as $scopeUuid) {
+            $scope = $this->scopes->find($scopeUuid);
+
+            if (
+                $scope === null
+                || !(bool) $scope->discussion_capable
+                || strtolower((string) $scope->graph_version_uuid) !== $validated->graphVersionUuid
+                || strtolower((string) $scope->community_uuid) !== $validated->communityUuid
+            ) {
+                throw new ContextWriteException('validated_relevance_became_stale', 409);
+            }
+        }
     }
 
     private function assertWriteGate(): void
