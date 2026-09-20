@@ -57,13 +57,17 @@ class DiscussionWikiContextAttributes
 
     private function readPathEnabled(): bool
     {
+        if (!$this->settings->bool(FeatureGates::PUBLIC_ROLLOUT_ENABLED)) {
+            return false;
+        }
+
+        // Public rollout alone does not expose context. At least one concrete
+        // user-facing WIKI capability must also be deliberately open.
         foreach ([
             FeatureGates::CONTEXT_WRITES_ENABLED,
             FeatureGates::BROWSE_ROUTES_ENABLED,
             FeatureGates::DERIVED_FEEDS_ENABLED,
             FeatureGates::BRAND_ROOT_DERIVED_FEEDS_ENABLED,
-            FeatureGates::ADMIN_GHOST_PREVIEW_ENABLED,
-            FeatureGates::PUBLIC_ROLLOUT_ENABLED,
         ] as $gate) {
             if ($this->settings->bool($gate)) {
                 return true;
