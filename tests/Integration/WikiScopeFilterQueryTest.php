@@ -112,6 +112,7 @@ final class WikiScopeFilterQueryTest extends TestCase
 
         echo "WIKI001E_ACTIVE_TARGET_SCOPE_REQUIRED=PASS\n";
         echo "WIKI001E_RETIRED_SCOPE_EXCLUDED=PASS\n";
+        echo "WIKI001E_RETIRED_DESCENDANT_CLOSURE_EXCLUDED=PASS\n";
         echo "WIKI001E_UNKNOWN_SCOPE_FAILS_CLOSED=PASS\n";
         echo "WIKI001E_MALFORMED_SCOPE_FAILS_CLOSED=PASS\n";
     }
@@ -261,12 +262,16 @@ final class WikiScopeFilterQueryTest extends TestCase
             [self::GRAPH_V1, self::BRAKES, self::TOYOTA, 2],
             [self::GRAPH_V1, self::TEXAS, self::LABOR, 1],
             [self::GRAPH_V1, self::X, self::TOYOTA, 1],
+            // Deliberately keep a closure row for a retired scope. The filter
+            // must still exclude it by intersecting with active scope lifecycle.
+            [self::GRAPH_V1, self::RETIRED, self::TOYOTA, 1],
 
             [self::GRAPH_V2, self::CAMRY, self::TOYOTA, 1],
             [self::GRAPH_V2, self::BRAKES, self::CAMRY, 1],
             [self::GRAPH_V2, self::BRAKES, self::TOYOTA, 2],
             [self::GRAPH_V2, self::TEXAS, self::LABOR, 1],
             [self::GRAPH_V2, self::X, self::LABOR, 1],
+            [self::GRAPH_V2, self::RETIRED, self::LABOR, 1],
         ] as [$graph, $descendant, $ancestor, $depth]) {
             $this->db->table('flatrate_wiki_scope_ancestors')->insert([
                 'graph_version_uuid' => $graph,
