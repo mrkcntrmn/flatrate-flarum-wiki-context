@@ -30,6 +30,17 @@ final class ExtendRegistrationTest extends TestCase
         $this->assertStringContainsString('flatrate.wiki.projection.stage', $extend);
         $this->assertStringContainsString('WikiScopeFilter::class', $extend);
         $this->assertStringNotContainsString('Extend\\ApiResource', $extend);
+        $this->assertStringContainsString("->get('/flatrate-wiki/scopes/{id}'", $extend);
+        $this->assertStringContainsString("->get('/flatrate-wiki/scopes/search'", $extend);
+        $this->assertStringContainsString("->get('/flatrate-wiki/scopes/resolve'", $extend);
+        $this->assertLessThan(
+            strpos($extend, "->get('/flatrate-wiki/scopes/{id}'"),
+            strpos($extend, "->get('/flatrate-wiki/scopes/search'")
+        );
+        $this->assertStringContainsString('ScopeSearchController::class', $extend);
+        $this->assertStringContainsString('ScopeResolveController::class', $extend);
+        $this->assertStringContainsString('flatRateWikiRelevanceMaxActive', $extend);
+        $this->assertStringContainsString('ContextWritePolicy::MAX_ACTIVE_RELEVANCE', $extend);
         $this->assertStringContainsString('CaptureDiscussionWikiContext::class', $extend);
         $this->assertStringContainsString('PersistStartedDiscussionWikiContext::class', $extend);
         $this->assertStringContainsString('DiscussionSaving::class', $extend);

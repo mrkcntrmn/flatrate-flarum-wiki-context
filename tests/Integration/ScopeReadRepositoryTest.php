@@ -88,6 +88,68 @@ final class ScopeReadRepositoryTest extends TestCase
         echo "WIKI001F_PUBLIC_SAFE_SCOPE_FIELDS=PASS\n";
     }
 
+    public function test_active_graph_version_id_rotates_with_projection_state(): void
+    {
+        $this->assertSame(self::GRAPH_V1, $this->repo->activeGraphVersionId(self::BRAKES));
+        $this->assertSame(self::GRAPH_V1, $this->repo->activeGraphVersionId(self::TOYOTA));
+
+        $this->db->table('flatrate_wiki_projection_state')
+            ->where('community_uuid', self::COMMUNITY)
+            ->update(['active_graph_version_uuid' => self::GRAPH_V2]);
+
+        $this->assertSame(self::GRAPH_V2, $this->repo->activeGraphVersionId(self::BRAKES));
+        $this->assertSame(self::BRAKES, $this->repo->findActive(self::BRAKES)['id']);
+        $this->assertNull($this->repo->activeGraphVersionId(self::RETIRED));
+        $this->assertNull($this->repo->activeGraphVersionId('99999999-9999-4999-8999-999999999999'));
+
+        echo "WIKI001F_ACTIVE_GRAPH_VERSION_PUBLIC_SAFE=PASS\n";
+        echo "WIKI001F_GRAPH_ROTATION_SCOPE_META=PASS\n";
+    }
+
+    public function test_search_active_discussion_capable_is_bounded_and_blank_safe(): void
+    {
+        $this->assertSame([], $this->repo->searchActiveDiscussionCapable(''));
+        $this->assertSame([], $this->repo->searchActiveDiscussionCapable('   '));
+
+        $brakes = $this->repo->searchActiveDiscussionCapable('Brakes');
+        $this->assertSame(['Brakes'], array_column($brakes, 'label'));
+
+        $retired = $this->repo->searchActiveDiscussionCapable('Retired');
+        $this->assertSame([], array_column($retired, 'label'));
+
+        $long = str_repeat('a', 80);
+        $this->assertSame([], $this->repo->searchActiveDiscussionCapable($long));
+
+        $bounded = $this->repo->searchActiveDiscussionCapable('a', 999);
+        $this->assertLessThanOrEqual(20, count($bounded));
+
+        echo "WIKI001F_RELEVANCE_SEARCH_ACTIVE_DISCUSSION_CAPABLE=PASS\n";
+        echo "WIKI001F_SCOPE_SEARCH_NO_BLANK_DUMP=PASS\n";
+    }
+
+    public function test_resolve_active_is_bounded_and_skips_unknown_or_retired(): void
+    {
+        $resolved = $this->repo->resolveActive([
+            self::TOYOTA,
+            self::RETIRED,
+            'not-a-uuid',
+            self::BRAKES,
+            self::TOYOTA,
+        ]);
+
+        $this->assertSame([self::TOYOTA, self::BRAKES], array_column($resolved, 'id'));
+
+        $many = [];
+        for ($i = 0; $i < 60; $i++) {
+            $many[] = sprintf('aaaaaaaa-aaaa-4aaa-8aaa-%012d', $i);
+        }
+        $many[0] = self::TOYOTA;
+        $capped = $this->repo->resolveActive($many, 50);
+        $this->assertLessThanOrEqual(50, count($capped));
+
+        echo "WIKI001F_SCOPE_RESOLVE_BOUNDED=PASS\n";
+    }
+
     public function test_breadcrumb_is_root_to_current_and_active_graph_only(): void
     {
         $labels = array_column($this->repo->breadcrumbs(self::BRAKES), 'label');

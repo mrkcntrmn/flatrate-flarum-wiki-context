@@ -2,6 +2,7 @@
 
 namespace FlatRate\WikiContext\Api\Controllers;
 
+use FlatRate\WikiContext\Context\ContextWritePolicy;
 use FlatRate\WikiContext\Repository\ScopeReadRepository;
 use FlatRate\WikiContext\Support\BrowseAccessGate;
 use FlatRate\WikiContext\Support\DirectoryDisplayPolicy;
@@ -55,6 +56,8 @@ final class ScopeShowController implements RequestHandlerInterface
                 'attributes' => $attributes,
             ],
             'meta' => [
+                'activeGraphVersionId' => $this->scopes->activeGraphVersionId($scopeUuid),
+                'relevanceMaxActive' => ContextWritePolicy::MAX_ACTIVE_RELEVANCE,
                 'breadcrumbs' => $this->scopes->breadcrumbs($scopeUuid),
                 'childrenSummary' => [
                     'directActiveCount' => $this->scopes->childCount($scopeUuid),

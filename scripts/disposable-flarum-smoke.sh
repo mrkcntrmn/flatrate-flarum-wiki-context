@@ -68,8 +68,31 @@ $title = $json["extra"]["flarum-extension"]["title"] ?? "";
 if ($title === "") { fwrite(STDERR, "MISSING_TITLE\n"); exit(1); }
 $extend = require "vendor/flatrate/flarum-wiki-context/extend.php";
 if (!is_array($extend)) { fwrite(STDERR, "EXTEND_NOT_ARRAY\n"); exit(1); }
+
+$extendSrc = file_get_contents("vendor/flatrate/flarum-wiki-context/extend.php");
+foreach ([
+  "/browse/{id}",
+  "BrowseRouteGateMiddleware",
+  "/flatrate-wiki/scopes/search",
+  "/flatrate-wiki/scopes/resolve",
+  "/flatrate-wiki/scopes/{id}",
+  "CaptureDiscussionWikiContext",
+  "PersistStartedDiscussionWikiContext",
+  "WikiScopeFilter",
+  "DiscussionWikiContextAttributes",
+] as $needle) {
+  if (strpos($extendSrc, $needle) === false) {
+    fwrite(STDERR, "MISSING_REGISTRATION={$needle}\n");
+    exit(1);
+  }
+}
+
 echo "EXTENSION_REGISTRATION=PASS\n";
 echo "FLARUM_BOOT_EXTEND_LOADABLE=PASS\n";
+echo "WIKI001F_BROWSE_ROUTE_REGISTRATION=PASS\n";
+echo "WIKI001F_SCOPE_API_REGISTRATION=PASS\n";
+echo "WIKI001F_CONTEXT_LISTENER_REGISTRATION=PASS\n";
+echo "WIKI001F_WIKI_SCOPE_FILTER_REGISTRATION=PASS\n";
 '
 
 # Optional MySQL-backed enable/disable (Flarum migrator rejects SQLite).

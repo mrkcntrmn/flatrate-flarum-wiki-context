@@ -6,6 +6,9 @@ import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
 import Placeholder from 'flarum/common/components/Placeholder';
 import DiscussionList from 'flarum/forum/components/DiscussionList';
 import DiscussionListState from 'flarum/forum/states/DiscussionListState';
+import DiscussionComposer from 'flarum/forum/components/DiscussionComposer';
+import LogInModal from 'flarum/forum/components/LogInModal';
+import Alert from 'flarum/common/components/Alert';
 
 import {
   directoryCaps,
@@ -14,6 +17,9 @@ import {
   viewAllCount,
   visibleInlineChildren,
 } from '../utils/directoryPolicy';
+import { canStartWikiDiscussion, resolveOwningBoardTag } from '../utils/owningBoard';
+import { createWikiComposerState } from '../utils/wikiComposerState';
+import { rememberScope } from '../utils/scopeCache';
 
 const VIEW_ALL_PAGE_SIZE_DESKTOP = 24;
 const VIEW_ALL_PAGE_SIZE_MOBILE = 18;
@@ -30,6 +36,7 @@ export default class BrowsePage extends Page {
     this.scopeUnavailable = false;
 
     this.caps = directoryCaps(typeof window !== 'undefined' ? window.innerWidth : 1024);
+    this.capsMode = this.caps.initial === 6 ? 'mobile' : 'desktop';
     this.inlineChildren = [];
     this.inlineMeta = null;
     this.inlineExpanded = false;
@@ -41,6 +48,9 @@ export default class BrowsePage extends Page {
     this.viewAllQuery = '';
     this.viewAllOffset = 0;
     this.viewAllTimer = null;
+    this.viewAllSearchGeneration = 0;
+    this.viewAllTriggerEl = null;
+    this.boundOnResize = this.onViewportResize.bind(this);
 
     const sort = ['latest', 'top', 'newest', 'oldest'].includes(String(vnode.attrs.sort || ''))
       ? String(vnode.attrs.sort)
@@ -55,12 +65,45 @@ export default class BrowsePage extends Page {
     this.discussionState.refresh();
   }
 
+  oncreate(vnode) {
+    super.oncreate(vnode);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this.boundOnResize);
+    }
+  }
+
   onremove(vnode) {
     if (this.viewAllTimer) {
       clearTimeout(this.viewAllTimer);
     }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', this.boundOnResize);
+    }
 
     super.onremove(vnode);
+  }
+
+  onViewportResize() {
+    const nextCaps = directoryCaps(window.innerWidth);
+    const nextMode = nextCaps.initial === 6 ? 'mobile' : 'desktop';
+
+    if (nextMode === this.capsMode) {
+      return;
+    }
+
+    this.caps = nextCaps;
+    this.capsMode = nextMode;
+    this.inlineExpanded = false;
+
+    this.requestChildren(0, this.caps.inlineMax, '')
+      .then((document) => {
+        this.inlineChildren = this.resourcesToScopes(document.data || []);
+        this.inlineMeta = document.meta || {};
+        m.redraw();
+      })
+      .catch(() => {
+        m.redraw();
+      });
   }
 
   apiBase() {
@@ -91,6 +134,9 @@ export default class BrowsePage extends Page {
       if (!scope) {
         throw new Error('wiki_scope_not_found');
       }
+
+      rememberScope(scope);
+      (this.breadcrumbs() || []).forEach((crumb) => rememberScope(crumb));
 
       app.setTitle(scope.label);
       this.normalizeCosmeticSlug(scope);
@@ -136,24 +182,22 @@ export default class BrowsePage extends Page {
     };
   }
 
+  scopeMeta() {
+    return (this.scopeDocument && this.scopeDocument.meta) || {};
+  }
+
   breadcrumbs() {
-    return (this.scopeDocument && this.scopeDocument.meta && this.scopeDocument.meta.breadcrumbs) || [];
+    return this.scopeMeta().breadcrumbs || [];
   }
 
   catchAll() {
-    const summary =
-      this.scopeDocument &&
-      this.scopeDocument.meta &&
-      this.scopeDocument.meta.childrenSummary;
+    const summary = this.scopeMeta().childrenSummary;
 
     return (summary && summary.catchAll) || (this.inlineMeta && this.inlineMeta.catchAll) || null;
   }
 
   totalNormalChildren() {
-    const summary =
-      this.scopeDocument &&
-      this.scopeDocument.meta &&
-      this.scopeDocument.meta.childrenSummary;
+    const summary = this.scopeMeta().childrenSummary;
 
     if (summary && Number.isFinite(Number(summary.normalActiveCount))) {
       return Number(summary.normalActiveCount);
@@ -163,10 +207,12 @@ export default class BrowsePage extends Page {
   }
 
   resourcesToScopes(resources) {
-    return resources.map((resource) => ({
-      id: resource.id,
-      ...(resource.attributes || {}),
-    }));
+    return resources.map((resource) =>
+      rememberScope({
+        id: resource.id,
+        ...(resource.attributes || {}),
+      })
+    );
   }
 
   normalizeCosmeticSlug(scope) {
@@ -184,11 +230,73 @@ export default class BrowsePage extends Page {
     m.route.set(target, null, { replace: true });
   }
 
-  openViewAll() {
+  showStartDiscussion() {
+    return canStartWikiDiscussion(this.scope(), this.scopeMeta());
+  }
+
+  startDiscussion() {
+    if (!app.session.user) {
+      app.modal.show(LogInModal);
+      return;
+    }
+
+    const scope = this.scope();
+    const meta = this.scopeMeta();
+
+    if (!canStartWikiDiscussion(scope, meta)) {
+      app.alerts.show(
+        Alert,
+        { type: 'error' },
+        app.translator.trans('flatrate-wiki-context.forum.browse.start_discussion_unavailable')
+      );
+      return;
+    }
+
+    const board = resolveOwningBoardTag(scope.owningBoardKey);
+    if (!board) {
+      app.alerts.show(
+        Alert,
+        { type: 'error' },
+        app.translator.trans('flatrate-wiki-context.forum.browse.owning_board_unresolved')
+      );
+      return;
+    }
+
+    const breadcrumbs = this.breadcrumbs();
+    const wikiState = createWikiComposerState({
+      primaryScopeId: scope.id,
+      activeGraphVersionId: meta.activeGraphVersionId,
+      owningBoardKey: scope.owningBoardKey,
+      breadcrumbLabels: breadcrumbs.map((crumb) => crumb.label),
+      relevanceScopeIds: [],
+      relevanceScopes: [],
+    });
+
+    const suggestions = breadcrumbs.filter(
+      (crumb) => crumb.id !== scope.id && crumb.discussionCapable !== false
+    );
+
+    app.composer.load(DiscussionComposer, { user: app.session.user });
+    app.composer.fields.tags = [board];
+    app.composer.fields.flatRateWiki = wikiState;
+    app.composer.fields.flatRateWikiSuggestions = suggestions;
+    app.composer.show();
+  }
+
+  openViewAll(event) {
+    if (event && event.currentTarget) {
+      this.viewAllTriggerEl = event.currentTarget;
+    }
+
     this.viewAllOpen = true;
     this.viewAllOffset = 0;
     this.viewAllQuery = '';
-    this.loadViewAllPage();
+    this.loadViewAllPage().then(() => {
+      const input = this.element && this.element.querySelector('.FlatRateWikiChildBrowser-searchLabel input');
+      if (input && typeof input.focus === 'function') {
+        input.focus();
+      }
+    });
   }
 
   closeViewAll() {
@@ -198,6 +306,12 @@ export default class BrowsePage extends Page {
     this.viewAllLoading = false;
     this.viewAllOffset = 0;
     this.viewAllQuery = '';
+
+    m.redraw();
+
+    if (this.viewAllTriggerEl && typeof this.viewAllTriggerEl.focus === 'function') {
+      this.viewAllTriggerEl.focus();
+    }
   }
 
   viewAllPageSize() {
@@ -207,6 +321,7 @@ export default class BrowsePage extends Page {
   }
 
   async loadViewAllPage() {
+    const generation = ++this.viewAllSearchGeneration;
     this.viewAllLoading = true;
     m.redraw();
 
@@ -217,11 +332,17 @@ export default class BrowsePage extends Page {
         this.viewAllQuery
       );
 
+      if (generation !== this.viewAllSearchGeneration) {
+        return;
+      }
+
       this.viewAllItems = this.resourcesToScopes(document.data || []);
       this.viewAllMeta = document.meta || {};
     } finally {
-      this.viewAllLoading = false;
-      m.redraw();
+      if (generation === this.viewAllSearchGeneration) {
+        this.viewAllLoading = false;
+        m.redraw();
+      }
     }
   }
 
@@ -280,11 +401,23 @@ export default class BrowsePage extends Page {
             className="FlatRateWikiBrowsePage-discussions"
             aria-labelledby="flatRateWikiDiscussionHeading"
           >
-            <h2 id="flatRateWikiDiscussionHeading" className="FlatRateWikiBrowsePage-sectionTitle">
-              {app.translator.trans('flatrate-wiki-context.forum.browse.discussions', {
-                label: scope.label,
-              })}
-            </h2>
+            <div className="FlatRateWikiBrowsePage-discussionHeader">
+              <h2 id="flatRateWikiDiscussionHeading" className="FlatRateWikiBrowsePage-sectionTitle">
+                {app.translator.trans('flatrate-wiki-context.forum.browse.discussions', {
+                  label: scope.label,
+                })}
+              </h2>
+
+              {this.showStartDiscussion() ? (
+                <Button
+                  className="Button Button--primary FlatRateWikiBrowsePage-startDiscussion"
+                  icon="fas fa-edit"
+                  onclick={() => this.startDiscussion()}
+                >
+                  {app.translator.trans('flatrate-wiki-context.forum.browse.start_discussion')}
+                </Button>
+              ) : null}
+            </div>
 
             <DiscussionList state={this.discussionState} />
           </section>
@@ -358,7 +491,7 @@ export default class BrowsePage extends Page {
 
         {!this.viewAllOpen ? (
           <div>
-            <ul className="FlatRateWikiDirectory-grid">
+            <ul className="FlatRateWikiDirectory-grid" id="flatRateWikiDirectoryInline">
               {visible.map((child) => this.directoryItem(child))}
               {catchAll ? this.directoryItem(catchAll, true) : null}
             </ul>
@@ -367,6 +500,8 @@ export default class BrowsePage extends Page {
               {!this.inlineExpanded && more > 0 ? (
                 <Button
                   className="Button"
+                  aria-expanded={this.inlineExpanded ? 'true' : 'false'}
+                  aria-controls="flatRateWikiDirectoryInline"
                   onclick={() => {
                     this.inlineExpanded = true;
                   }}
@@ -378,7 +513,7 @@ export default class BrowsePage extends Page {
               ) : null}
 
               {overflow > 0 ? (
-                <Button className="Button" onclick={() => this.openViewAll()}>
+                <Button className="Button" onclick={(event) => this.openViewAll(event)}>
                   {app.translator.trans('flatrate-wiki-context.forum.browse.view_all', {
                     count: totalNormal,
                   })}

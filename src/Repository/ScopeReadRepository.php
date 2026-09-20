@@ -20,6 +20,110 @@ final class ScopeReadRepository
         return $row ? $this->publicScope($row) : null;
     }
 
+    /**
+     * Public-safe active projection graph UUID for the community owning this scope.
+     * Never derived from client/query input — only from projection_state joined to the active scope.
+     */
+    public function activeGraphVersionId(string $scopeUuid): ?string
+    {
+        $row = $this->activeScopes()
+            ->where('s.scope_uuid', strtolower($scopeUuid))
+            ->first(['ps.active_graph_version_uuid']);
+
+        if ($row === null || $row->active_graph_version_uuid === null) {
+            return null;
+        }
+
+        return strtolower((string) $row->active_graph_version_uuid);
+    }
+
+    /**
+     * Bounded active discussion-capable scope search for relevance picking.
+     * Blank queries return no rows (no full-graph dump).
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function searchActiveDiscussionCapable(string $query, int $limit = 20): array
+    {
+        $query = trim($query);
+        $query = function_exists('mb_substr') ? mb_substr($query, 0, 64) : substr($query, 0, 64);
+        $limit = max(1, min(20, $limit));
+
+        if ($query === '') {
+            return [];
+        }
+
+        $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $query);
+
+        $rows = $this->activeScopes()
+            ->where('s.discussion_capable', true)
+            ->where('s.display_label', 'like', '%' . $escaped . '%')
+            ->orderBy('s.display_label')
+            ->orderBy('s.scope_uuid')
+            ->limit($limit)
+            ->get($this->publicColumns());
+
+        $items = [];
+        foreach ($rows as $row) {
+            $items[] = $this->publicScope($row);
+        }
+
+        return $items;
+    }
+
+    /**
+     * Bounded batch resolver for public-safe active scope metadata.
+     *
+     * @param list<string> $scopeUuids
+     * @return list<array<string,mixed>>
+     */
+    public function resolveActive(array $scopeUuids, int $maxIds = 50): array
+    {
+        $maxIds = max(1, min(50, $maxIds));
+        $normalized = [];
+
+        foreach ($scopeUuids as $raw) {
+            if (!is_string($raw)) {
+                continue;
+            }
+            $id = strtolower(trim($raw));
+            if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $id)) {
+                continue;
+            }
+            if (!in_array($id, $normalized, true)) {
+                $normalized[] = $id;
+            }
+            if (count($normalized) >= $maxIds) {
+                break;
+            }
+        }
+
+        if ($normalized === []) {
+            return [];
+        }
+
+        $rows = $this->activeScopes()
+            ->whereIn('s.scope_uuid', $normalized)
+            ->orderBy('s.display_label')
+            ->orderBy('s.scope_uuid')
+            ->get($this->publicColumns());
+
+        $byId = [];
+        foreach ($rows as $row) {
+            $scope = $this->publicScope($row);
+            $byId[$scope['id']] = $scope;
+        }
+
+        $ordered = [];
+        foreach ($normalized as $id) {
+            if (isset($byId[$id])) {
+                $ordered[] = $byId[$id];
+            }
+        }
+
+        return $ordered;
+    }
+
     public function breadcrumbs(string $scopeUuid): array
     {
         $scopeUuid = strtolower($scopeUuid);

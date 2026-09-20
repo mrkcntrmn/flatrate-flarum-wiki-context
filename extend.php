@@ -10,6 +10,7 @@
 namespace FlatRate\WikiContext;
 
 use Flarum\Api\Serializer\BasicDiscussionSerializer;
+use Flarum\Api\Serializer\ForumSerializer;
 use Flarum\Discussion\Event\Saving as DiscussionSaving;
 use Flarum\Discussion\Event\Started as DiscussionStarted;
 use Flarum\Extend;
@@ -19,8 +20,11 @@ use FlatRate\WikiContext\Api\Controllers\ProjectionChunkController;
 use FlatRate\WikiContext\Api\Controllers\ProjectionStageController;
 use FlatRate\WikiContext\Api\Controllers\ProjectionValidateController;
 use FlatRate\WikiContext\Api\Controllers\ScopeChildrenController;
+use FlatRate\WikiContext\Api\Controllers\ScopeResolveController;
+use FlatRate\WikiContext\Api\Controllers\ScopeSearchController;
 use FlatRate\WikiContext\Api\Controllers\ScopeShowController;
 use FlatRate\WikiContext\Api\Serializers\DiscussionWikiContextAttributes;
+use FlatRate\WikiContext\Context\ContextWritePolicy;
 use FlatRate\WikiContext\Command\BackfillRootContextCommand;
 use FlatRate\WikiContext\Command\PreviewAcceptCommand;
 use FlatRate\WikiContext\Command\PreviewStatusCommand;
@@ -60,7 +64,18 @@ return [
         ->serializeToForum('flatRateWikiAdminGhostPreviewEnabled', FeatureGates::ADMIN_GHOST_PREVIEW_ENABLED, 'boolval')
         ->serializeToForum('flatRateWikiPublicRolloutEnabled', FeatureGates::PUBLIC_ROLLOUT_ENABLED, 'boolval'),
 
+    (new Extend\ApiSerializer(ForumSerializer::class))
+        ->attributes(static function (ForumSerializer $serializer, $model, array $attributes): array {
+            // Public-safe numeric policy bound from server authority (not a magic client constant).
+            $attributes['flatRateWikiRelevanceMaxActive'] = ContextWritePolicy::MAX_ACTIVE_RELEVANCE;
+
+            return $attributes;
+        }),
+
     (new Extend\Routes('api'))
+        // Static paths before /scopes/{id} so "search"/"resolve" are never treated as UUIDs.
+        ->get('/flatrate-wiki/scopes/search', 'flatrate.wiki.scopes.search', ScopeSearchController::class)
+        ->get('/flatrate-wiki/scopes/resolve', 'flatrate.wiki.scopes.resolve', ScopeResolveController::class)
         ->get('/flatrate-wiki/scopes/{id}', 'flatrate.wiki.scopes.show', ScopeShowController::class)
         ->get('/flatrate-wiki/scopes/{id}/children', 'flatrate.wiki.scopes.children', ScopeChildrenController::class)
         ->post('/flatrate-wiki/projection/stage', 'flatrate.wiki.projection.stage', ProjectionStageController::class)
