@@ -2,8 +2,18 @@
 
 **THIS PACKAGE IS NOT YET AUTHORIZED FOR PRODUCTION INSTALLATION.**
 
-Source-only Flarum extension skeleton for FlatRate WIKI semantic context projection
-(`WIKI-001C` / `WIKI-001P`). Target runtime: **Flarum 1.8.19**, **PHP ^8.1**.
+Source-only Flarum extension for FlatRate WIKI semantic context projection
+(`WIKI-001C/D/E` / `WIKI-001P`). Target runtime: **Flarum 1.8.19**, **PHP ^8.1**.
+
+Current source status:
+
+```text
+WIKI-001C=PASS
+WIKI-001D=PASS
+WIKI-001E=IN_QUALIFICATION
+PRODUCTION_INSTALL=false
+PUBLIC_ROLLOUT=false
+```
 
 ## Hard boundary
 
@@ -83,5 +93,5 @@ TABLE_PREFIX=flarum_ bash scripts/mariadb-migration-harness.sh
 
 ## Production boundary
 
-Do not install on production from this R1 skeleton.
-Next milestone: disposable extension qualification — not deployment.
+Do not install or enable this package on production from the current source qualification.
+The current tranche is WIKI-001E derived semantic-feed qualification — not deployment.
