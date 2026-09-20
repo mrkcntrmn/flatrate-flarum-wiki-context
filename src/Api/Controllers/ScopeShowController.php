@@ -58,6 +58,8 @@ final class ScopeShowController implements RequestHandlerInterface
                 'breadcrumbs' => $this->scopes->breadcrumbs($scopeUuid),
                 'childrenSummary' => [
                     'directActiveCount' => $this->scopes->childCount($scopeUuid),
+                    'normalActiveCount' => $this->scopes->normalChildCount($scopeUuid),
+                    'catchAll' => $this->scopes->catchAllChild($scopeUuid),
                 ],
                 'directoryDisplayPolicy' => DirectoryDisplayPolicy::contract(),
                 'publicSafeFieldsOnly' => true,
