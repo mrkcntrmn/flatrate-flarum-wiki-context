@@ -104,37 +104,47 @@ final class ScopeReadRepositoryTest extends TestCase
         echo "WIKI001F_ACTIVE_PROJECTION_ONLY=PASS\n";
     }
 
-    public function test_children_are_direct_only_and_misc_is_last(): void
+    public function test_normal_children_are_direct_only_and_catch_all_is_separate(): void
     {
-        $page = $this->repo->children(self::TOYOTA, 0, 50);
+        $page = $this->repo->normalChildren(self::TOYOTA, 0, 50);
         $labels = array_column($page['items'], 'label');
 
-        $this->assertSame(['Camry', 'Corolla', 'Other / Misc'], $labels);
+        $this->assertSame(['Camry', 'Corolla'], $labels);
         $this->assertNotContains('Brakes', $labels);
         $this->assertNotContains('Retired Child', $labels);
-        $this->assertSame(3, $page['total']);
+        $this->assertNotContains('Other / Misc', $labels);
+        $this->assertSame(2, $page['total']);
         $this->assertFalse($page['has_more']);
+
+        $catchAll = $this->repo->catchAllChild(self::TOYOTA);
+        $this->assertNotNull($catchAll);
+        $this->assertSame('Other / Misc', $catchAll['label']);
+        $this->assertTrue($catchAll['isCatchAll']);
+        $this->assertSame(3, $this->repo->childCount(self::TOYOTA));
 
         echo "WIKI001F_DIRECT_CHILDREN_ONLY=PASS\n";
         echo "WIKI001F_MISC_LAST=PASS\n";
+        echo "WIKI001F_MISC_NOT_OVERFLOW=PASS\n";
         echo "WIKI001F_RETIRED_CHILD_EXCLUDED=PASS\n";
     }
 
-    public function test_children_pagination_is_bounded(): void
+    public function test_normal_children_pagination_is_bounded_without_consuming_misc(): void
     {
-        $first = $this->repo->children(self::TOYOTA, 0, 2);
-        $second = $this->repo->children(self::TOYOTA, 2, 2);
+        $first = $this->repo->normalChildren(self::TOYOTA, 0, 1);
+        $second = $this->repo->normalChildren(self::TOYOTA, 1, 1);
 
-        $this->assertSame(['Camry', 'Corolla'], array_column($first['items'], 'label'));
+        $this->assertSame(['Camry'], array_column($first['items'], 'label'));
         $this->assertTrue($first['has_more']);
-        $this->assertSame(['Other / Misc'], array_column($second['items'], 'label'));
+        $this->assertSame(['Corolla'], array_column($second['items'], 'label'));
         $this->assertFalse($second['has_more']);
 
-        $bounded = $this->repo->children(self::TOYOTA, 0, 999);
+        $bounded = $this->repo->normalChildren(self::TOYOTA, 0, 999);
         $this->assertSame(50, $bounded['limit']);
+        $this->assertSame('Other / Misc', $this->repo->catchAllChild(self::TOYOTA)['label']);
 
         echo "WIKI001F_CHILD_PAGINATION=PASS\n";
         echo "WIKI001F_CHILD_LIMIT_BOUNDED=PASS\n";
+        echo "WIKI001F_MISC_BUDGET_EXEMPT=PASS\n";
     }
 
     private function seedGraph(string $graph): void
