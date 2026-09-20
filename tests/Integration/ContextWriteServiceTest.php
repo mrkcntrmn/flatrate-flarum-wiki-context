@@ -149,6 +149,59 @@ final class ContextWriteServiceTest extends TestCase
         ]);
     }
 
+    public function test_prepare_is_write_free_and_started_persist_path_writes_only_after_validation(): void
+    {
+        $service = $this->service(true);
+
+        $validated = $service->prepareInitial(
+            $this->dto(self::TOYOTA_CAMRY, null, [self::LABOR_TEXAS]),
+            [1]
+        );
+
+        $this->assertSame(self::TOYOTA_CAMRY, $validated->primaryScopeUuid);
+        $this->assertSame(0, $this->db->table('flatrate_wiki_discussion_context')->count());
+        $this->assertSame(0, $this->db->table('flatrate_wiki_discussion_relevance')->count());
+        $this->assertSame(0, $this->db->table('flatrate_wiki_discussion_context_audit')->count());
+
+        $state = $service->persistInitialValidated(10, 7, 7, $validated);
+
+        $this->assertSame(self::TOYOTA_CAMRY, $state['primaryScopeId']);
+        $this->assertSame(1, $state['contextRevision']);
+        $this->assertSame([self::LABOR_TEXAS], $state['relevanceScopeIds']);
+        $this->assertSame(1, $this->db->table('flatrate_wiki_discussion_context')->count());
+        $this->assertSame(1, $this->db->table('flatrate_wiki_discussion_relevance')->count());
+        $this->assertSame(2, $this->db->table('flatrate_wiki_discussion_context_audit')->count());
+    }
+
+    public function test_prepared_context_fails_closed_if_active_graph_rotates_before_started_persistence(): void
+    {
+        $service = $this->service(true);
+
+        $validated = $service->prepareInitial(
+            $this->dto(self::TOYOTA_CAMRY, null, [self::LABOR_TEXAS]),
+            [1]
+        );
+
+        $this->db->table('flatrate_wiki_projection_state')
+            ->where('community_uuid', self::COMMUNITY)
+            ->update([
+                'active_graph_version_uuid' => '99999999-9999-4999-8999-999999999999',
+                'active_generation' => 2,
+            ]);
+
+        try {
+            $service->persistInitialValidated(10, 7, 7, $validated);
+            $this->fail('Expected validated_context_became_stale');
+        } catch (ContextWriteException $e) {
+            $this->assertSame('validated_context_became_stale', $e->reason);
+            $this->assertSame(409, $e->httpStatus);
+        }
+
+        $this->assertSame(0, $this->db->table('flatrate_wiki_discussion_context')->count());
+        $this->assertSame(0, $this->db->table('flatrate_wiki_discussion_relevance')->count());
+        $this->assertSame(0, $this->db->table('flatrate_wiki_discussion_context_audit')->count());
+    }
+
     public function test_initial_assignment_persists_revision_relevance_and_author_provenance(): void
     {
         $service = $this->service(true);
