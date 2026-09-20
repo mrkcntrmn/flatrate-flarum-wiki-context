@@ -16,7 +16,7 @@ jobs:
           php-version: '8.2'
           tools: composer:v2
           coverage: none
-          extensions: curl, dom, mbstring, openssl, pdo, pdo_mysql, tokenizer, xml, xmlwriter, zip
+          extensions: curl, dom, mbstring, openssl, pdo, pdo_mysql, pdo_sqlite, tokenizer, xml, xmlwriter, zip
       - name: Composer validate
         run: |
           rm -f composer.lock

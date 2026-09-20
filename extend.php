@@ -10,7 +10,10 @@
 namespace FlatRate\WikiContext;
 
 use Flarum\Api\Serializer\BasicDiscussionSerializer;
+use Flarum\Discussion\Event\Saving as DiscussionSaving;
+use Flarum\Discussion\Event\Started as DiscussionStarted;
 use Flarum\Extend;
+use FlatRate\WikiContext\Api\Controllers\DiscussionContextController;
 use FlatRate\WikiContext\Api\Controllers\ProjectionActivateController;
 use FlatRate\WikiContext\Api\Controllers\ProjectionChunkController;
 use FlatRate\WikiContext\Api\Controllers\ProjectionStageController;
@@ -25,6 +28,8 @@ use FlatRate\WikiContext\Command\ProjectionReconcileCommand;
 use FlatRate\WikiContext\Command\ProjectionRollbackCommand;
 use FlatRate\WikiContext\Command\ProjectionStatusCommand;
 use FlatRate\WikiContext\Filter\WikiScopeFilter;
+use FlatRate\WikiContext\Listener\CaptureDiscussionWikiContext;
+use FlatRate\WikiContext\Listener\PersistStartedDiscussionWikiContext;
 use FlatRate\WikiContext\Middleware\ProjectionHmacMiddleware;
 use FlatRate\WikiContext\Support\FeatureGates;
 
@@ -58,10 +63,15 @@ return [
         ->post('/flatrate-wiki/projection/stage', 'flatrate.wiki.projection.stage', ProjectionStageController::class)
         ->post('/flatrate-wiki/projection/chunk', 'flatrate.wiki.projection.chunk', ProjectionChunkController::class)
         ->post('/flatrate-wiki/projection/validate', 'flatrate.wiki.projection.validate', ProjectionValidateController::class)
-        ->post('/flatrate-wiki/projection/activate', 'flatrate.wiki.projection.activate', ProjectionActivateController::class),
+        ->post('/flatrate-wiki/projection/activate', 'flatrate.wiki.projection.activate', ProjectionActivateController::class)
+        ->patch('/flatrate-wiki/discussions/{id}/context', 'flatrate.wiki.discussions.context', DiscussionContextController::class),
 
     (new Extend\Middleware('api'))
         ->add(ProjectionHmacMiddleware::class),
+
+    (new Extend\Event())
+        ->listen(DiscussionSaving::class, CaptureDiscussionWikiContext::class)
+        ->listen(DiscussionStarted::class, PersistStartedDiscussionWikiContext::class),
 
     (new Extend\Filter(\Flarum\Discussion\Filter\DiscussionFilterer::class))
         ->addFilter(WikiScopeFilter::class),
