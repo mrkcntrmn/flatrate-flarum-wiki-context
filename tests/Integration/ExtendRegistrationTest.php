@@ -29,9 +29,16 @@ final class ExtendRegistrationTest extends TestCase
         $this->assertStringContainsString("->default(FeatureGates::PUBLIC_ROLLOUT_ENABLED, '0')", $extend);
         $this->assertStringContainsString('flatrate.wiki.projection.stage', $extend);
         $this->assertStringContainsString('WikiScopeFilter::class', $extend);
+        $this->assertStringContainsString('DiscussionWikiContextFields::class', $extend);
+        $this->assertStringContainsString('SaveDiscussionWikiContext::class', $extend);
+        $this->assertStringContainsString('DiscussionContextController::class', $extend);
+        $this->assertStringContainsString("->patch('/flatrate-wiki/discussions/{id}/context'", $extend);
         $this->assertStringContainsString("exemptRoute('flatrate.wiki.projection.stage')", $extend);
+        $this->assertStringNotContainsString("exemptRoute('flatrate.wiki.discussions.context')", $extend);
         $this->assertStringNotContainsString('projection.rollback', $extend);
         $this->assertStringContainsString('NOT YET AUTHORIZED FOR PRODUCTION', $extend);
+        echo "WIKI001D_CONTEXT_ROUTE_REGISTRATION=PASS\n";
+        echo "WIKI001D_CREATE_HOOK_REGISTRATION=PASS\n";
         echo "EXTEND_REGISTRATION=PASS\n";
     }
 
