@@ -2,29 +2,27 @@
 
 namespace FlatRate\WikiContext\Api\Controllers;
 
-use FlatRate\WikiContext\Support\FeatureGates;
-use Flarum\Settings\SettingsRepositoryInterface;
+use FlatRate\WikiContext\Support\BrowseAccessGate;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Public scope metadata skeleton. Fail-closed unless browse/public gates allow.
+ * Public scope metadata skeleton.
+ *
+ * Ordinary browse APIs require BOTH browse-routes and public-rollout gates.
+ * WIKI-001P ghost preview must use a separately authorized server path.
  */
 final class ScopeShowController implements RequestHandlerInterface
 {
-    public function __construct(private SettingsRepositoryInterface $settings)
+    public function __construct(private BrowseAccessGate $browseAccess)
     {
     }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        $rollout = (bool) $this->settings->get(FeatureGates::PUBLIC_ROLLOUT_ENABLED);
-        $browse = (bool) $this->settings->get(FeatureGates::BROWSE_ROUTES_ENABLED);
-        $preview = (bool) $this->settings->get(FeatureGates::ADMIN_GHOST_PREVIEW_ENABLED);
-
-        if (!$rollout && !$browse && !$preview) {
+        if (!$this->browseAccess->publicBrowseEnabled()) {
             return new JsonResponse([
                 'errors' => [['status' => '404', 'code' => 'wiki_browse_closed']],
             ], 404);
