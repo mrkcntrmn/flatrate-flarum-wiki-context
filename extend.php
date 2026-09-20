@@ -9,9 +9,9 @@
 
 namespace FlatRate\WikiContext;
 
-use Flarum\Api\Resource\DiscussionResource;
 use Flarum\Api\Serializer\BasicDiscussionSerializer;
 use Flarum\Discussion\Event\Saving as DiscussionSaving;
+use Flarum\Discussion\Event\Started as DiscussionStarted;
 use Flarum\Extend;
 use FlatRate\WikiContext\Api\Controllers\DiscussionContextController;
 use FlatRate\WikiContext\Api\Controllers\ProjectionActivateController;
@@ -20,7 +20,6 @@ use FlatRate\WikiContext\Api\Controllers\ProjectionStageController;
 use FlatRate\WikiContext\Api\Controllers\ProjectionValidateController;
 use FlatRate\WikiContext\Api\Controllers\ScopeChildrenController;
 use FlatRate\WikiContext\Api\Controllers\ScopeShowController;
-use FlatRate\WikiContext\Api\DiscussionWikiContextFields;
 use FlatRate\WikiContext\Api\Serializers\DiscussionWikiContextAttributes;
 use FlatRate\WikiContext\Command\BackfillRootContextCommand;
 use FlatRate\WikiContext\Command\PreviewAcceptCommand;
@@ -29,7 +28,8 @@ use FlatRate\WikiContext\Command\ProjectionReconcileCommand;
 use FlatRate\WikiContext\Command\ProjectionRollbackCommand;
 use FlatRate\WikiContext\Command\ProjectionStatusCommand;
 use FlatRate\WikiContext\Filter\WikiScopeFilter;
-use FlatRate\WikiContext\Listener\SaveDiscussionWikiContext;
+use FlatRate\WikiContext\Listener\CaptureDiscussionWikiContext;
+use FlatRate\WikiContext\Listener\PersistStartedDiscussionWikiContext;
 use FlatRate\WikiContext\Middleware\ProjectionHmacMiddleware;
 use FlatRate\WikiContext\Support\FeatureGates;
 
@@ -69,11 +69,9 @@ return [
     (new Extend\Middleware('api'))
         ->add(ProjectionHmacMiddleware::class),
 
-    (new Extend\ApiResource(DiscussionResource::class))
-        ->fields(DiscussionWikiContextFields::class),
-
     (new Extend\Event())
-        ->listen(DiscussionSaving::class, SaveDiscussionWikiContext::class),
+        ->listen(DiscussionSaving::class, CaptureDiscussionWikiContext::class)
+        ->listen(DiscussionStarted::class, PersistStartedDiscussionWikiContext::class),
 
     (new Extend\Filter(\Flarum\Discussion\Filter\DiscussionFilterer::class))
         ->addFilter(WikiScopeFilter::class),
