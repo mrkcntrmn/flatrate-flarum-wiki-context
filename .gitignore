@@ -10,3 +10,4 @@ composer.lock
 /artifacts/
 /tmp/
 *.sqlite
+js/dist/*.LICENSE.txt
