@@ -7,15 +7,18 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Arr;
 
 /**
- * Projection protocol v2 orchestration skeleton.
- * Stage → chunk → validate → activate. No production enablement.
+ * Projection protocol v2 orchestration.
+ * Stage → chunk (materialize rows) → validate → activate.
+ * Active pointer flips only on activate; prior active rows remain intact on failure.
  */
 final class ProjectionService
 {
     public function __construct(
         private ConnectionInterface $db,
-        private SettingsReader $settings
+        private SettingsReader $settings,
+        private ?ProjectionMaterializer $materializer = null
     ) {
+        $this->materializer ??= new ProjectionMaterializer($this->db);
     }
 
     public function projectionSyncEnabled(): bool
@@ -119,6 +122,13 @@ final class ProjectionService
         $chunkDigest = (string) Arr::get($payload, 'chunk_digest', '');
         $chunkCount = (int) Arr::get($payload, 'chunk_count', 0);
 
+        $version = $this->db->table('flatrate_wiki_graph_versions')
+            ->where('graph_version_uuid', $graphVersion)
+            ->first();
+        if (!$version || !in_array((string) $version->status, ['staging', 'validated'], true)) {
+            return ['status' => 'reject', 'reason' => 'VERSION_NOT_STAGING'];
+        }
+
         $existing = $this->db->table('flatrate_wiki_projection_chunks')
             ->where('graph_version_uuid', $graphVersion)
             ->where('chunk_index', $chunkIndex)
@@ -133,26 +143,66 @@ final class ProjectionService
             return ['status' => 'reject', 'reason' => $classification];
         }
         if ($classification === 'ALREADY_ACCEPTED') {
-            return ['status' => 'already_accepted', 'chunk_index' => $chunkIndex];
+            return [
+                'status' => 'already_accepted',
+                'chunk_index' => $chunkIndex,
+                'active_projection_mutated' => false,
+            ];
         }
 
-        $this->db->table('flatrate_wiki_projection_chunks')->insert([
-            'graph_version_uuid' => $graphVersion,
-            'chunk_index' => $chunkIndex,
-            'chunk_count' => $chunkCount,
-            'chunk_digest' => $chunkDigest,
-            'scope_row_count' => (int) Arr::get($payload, 'scope_row_count', 0),
-            'ancestor_row_count' => (int) Arr::get($payload, 'ancestor_row_count', 0),
-            'alias_row_count' => (int) Arr::get($payload, 'alias_row_count', 0),
-            'received_at' => date('Y-m-d H:i:s'),
-        ]);
+        try {
+            return $this->db->transaction(function () use (
+                $payload,
+                $graphVersion,
+                $chunkIndex,
+                $chunkDigest,
+                $chunkCount
+            ) {
+                // Re-entering staging after validate requires clear status.
+                $this->db->table('flatrate_wiki_graph_versions')
+                    ->where('graph_version_uuid', $graphVersion)
+                    ->update([
+                        'status' => 'staging',
+                        'validated_at' => null,
+                    ]);
 
-        // Chunk rows are staged only; active projection is never partially mutated.
-        return [
-            'status' => 'accepted',
-            'chunk_index' => $chunkIndex,
-            'active_projection_mutated' => false,
-        ];
+                $counts = $this->materializer->materializeChunk($graphVersion, $payload);
+
+                $declaredScope = (int) Arr::get($payload, 'scope_row_count', $counts['scope_row_count']);
+                $declaredAncestor = (int) Arr::get($payload, 'ancestor_row_count', $counts['ancestor_row_count']);
+                $declaredAlias = (int) Arr::get($payload, 'alias_row_count', $counts['alias_row_count']);
+
+                if ($declaredScope !== $counts['scope_row_count']
+                    || $declaredAncestor !== $counts['ancestor_row_count']
+                    || $declaredAlias !== $counts['alias_row_count']) {
+                    throw new \RuntimeException('CHUNK_COUNT_MISMATCH');
+                }
+
+                $this->db->table('flatrate_wiki_projection_chunks')->insert([
+                    'graph_version_uuid' => $graphVersion,
+                    'chunk_index' => $chunkIndex,
+                    'chunk_count' => $chunkCount,
+                    'chunk_digest' => $chunkDigest,
+                    'scope_row_count' => $counts['scope_row_count'],
+                    'ancestor_row_count' => $counts['ancestor_row_count'],
+                    'alias_row_count' => $counts['alias_row_count'],
+                    'received_at' => date('Y-m-d H:i:s'),
+                ]);
+
+                return [
+                    'status' => 'accepted',
+                    'chunk_index' => $chunkIndex,
+                    'scope_row_count' => $counts['scope_row_count'],
+                    'ancestor_row_count' => $counts['ancestor_row_count'],
+                    'alias_row_count' => $counts['alias_row_count'],
+                    'active_projection_mutated' => false,
+                ];
+            });
+        } catch (\InvalidArgumentException $e) {
+            return ['status' => 'reject', 'reason' => $e->getMessage()];
+        } catch (\RuntimeException $e) {
+            return ['status' => 'reject', 'reason' => $e->getMessage()];
+        }
     }
 
     /**
@@ -180,6 +230,15 @@ final class ProjectionService
             return ['status' => 'reject', 'reason' => 'MISSING_CHUNKS'];
         }
 
+        $integrity = $this->materializer->validateVersion($version);
+        if (($integrity['status'] ?? '') !== 'ok') {
+            return [
+                'status' => 'reject',
+                'reason' => $integrity['reason'] ?? 'INTEGRITY_FAILED',
+                'activated' => false,
+            ];
+        }
+
         $this->db->table('flatrate_wiki_graph_versions')
             ->where('graph_version_uuid', $graphVersion)
             ->update([
@@ -191,6 +250,7 @@ final class ProjectionService
             'status' => 'validated',
             'graph_version_uuid' => $graphVersion,
             'activated' => false,
+            'checks' => $integrity['checks'] ?? [],
         ];
     }
 
@@ -214,6 +274,16 @@ final class ProjectionService
 
             if (!$version || $version->status !== 'validated') {
                 return ['status' => 'reject', 'reason' => 'NOT_VALIDATED'];
+            }
+
+            // Re-check integrity inside activation transaction.
+            $integrity = $this->materializer->validateVersion($version);
+            if (($integrity['status'] ?? '') !== 'ok') {
+                return [
+                    'status' => 'reject',
+                    'reason' => $integrity['reason'] ?? 'INTEGRITY_FAILED',
+                    'active_graph_unchanged' => true,
+                ];
             }
 
             $community = (string) $version->community_uuid;
@@ -279,10 +349,191 @@ final class ProjectionService
                     'activated_at' => $now,
                 ]);
 
+            $scopeCount = (int) $this->db->table('flatrate_wiki_scopes')
+                ->where('graph_version_uuid', $graphVersion)
+                ->count();
+            $ancestorCount = (int) $this->db->table('flatrate_wiki_scope_ancestors')
+                ->where('graph_version_uuid', $graphVersion)
+                ->count();
+
             return [
                 'status' => 'activated',
                 'graph_version_uuid' => $graphVersion,
                 'prior_active' => $activeUuid,
+                'scope_count' => $scopeCount,
+                'ancestor_count' => $ancestorCount,
+                'reconcile' => [
+                    'scope_count_matches_manifest' => $scopeCount === (int) $version->scope_count,
+                    'ancestor_count_matches_manifest' => $ancestorCount === (int) $version->ancestor_count,
+                ],
+            ];
+        });
+    }
+
+    /**
+     * Read-only reconciliation report for the active (or specified) graph.
+     *
+     * @return array<string,mixed>
+     */
+    public function reconcile(?string $communityUuid = null): array
+    {
+        $query = $this->db->table('flatrate_wiki_projection_state');
+        if ($communityUuid !== null && $communityUuid !== '') {
+            $query->where('community_uuid', strtolower($communityUuid));
+        }
+        $states = $query->get();
+
+        $reports = [];
+        foreach ($states as $state) {
+            $graph = (string) $state->active_graph_version_uuid;
+            $version = $this->db->table('flatrate_wiki_graph_versions')
+                ->where('graph_version_uuid', $graph)
+                ->first();
+            $scopeCount = (int) $this->db->table('flatrate_wiki_scopes')
+                ->where('graph_version_uuid', $graph)
+                ->count();
+            $ancestorCount = (int) $this->db->table('flatrate_wiki_scope_ancestors')
+                ->where('graph_version_uuid', $graph)
+                ->count();
+
+            $integrity = $version ? $this->materializer->validateVersion($version) : [
+                'status' => 'reject',
+                'reason' => 'MISSING_VERSION_ROW',
+            ];
+
+            $reports[] = [
+                'community_uuid' => (string) $state->community_uuid,
+                'active_graph_version_uuid' => $graph,
+                'active_generation' => (int) $state->active_generation,
+                'manifest_scope_count' => $version ? (int) $version->scope_count : null,
+                'manifest_ancestor_count' => $version ? (int) $version->ancestor_count : null,
+                'actual_scope_count' => $scopeCount,
+                'actual_ancestor_count' => $ancestorCount,
+                'integrity_status' => $integrity['status'] ?? 'reject',
+                'integrity_reason' => $integrity['reason'] ?? null,
+                'ok' => ($integrity['status'] ?? '') === 'ok'
+                    && $version
+                    && $scopeCount === (int) $version->scope_count
+                    && $ancestorCount === (int) $version->ancestor_count,
+            ];
+        }
+
+        return [
+            'status' => 'reconciled',
+            'dry_run' => true,
+            'production_mutation' => false,
+            'communities' => $reports,
+        ];
+    }
+
+    /**
+     * CLI-only rollback: switch active pointer to a previously accepted historical version.
+     * Does not delete superseded rows. Remote API remains forbidden.
+     *
+     * @return array<string,mixed>
+     */
+    public function rollback(string $targetVersionUuid, string $reason, bool $dryRun = true): array
+    {
+        $targetVersionUuid = strtolower($targetVersionUuid);
+
+        $target = $this->db->table('flatrate_wiki_graph_versions')
+            ->where('graph_version_uuid', $targetVersionUuid)
+            ->first();
+
+        if (!$target) {
+            return ['status' => 'reject', 'reason' => 'UNKNOWN_VERSION', 'dry_run' => $dryRun];
+        }
+
+        $integrity = $this->materializer->validateVersion($target);
+        if (($integrity['status'] ?? '') !== 'ok') {
+            return [
+                'status' => 'reject',
+                'reason' => $integrity['reason'] ?? 'TARGET_INTEGRITY_FAILED',
+                'dry_run' => $dryRun,
+            ];
+        }
+
+        $community = (string) $target->community_uuid;
+        $state = $this->db->table('flatrate_wiki_projection_state')
+            ->where('community_uuid', $community)
+            ->first();
+
+        if (!$state) {
+            return ['status' => 'reject', 'reason' => 'NO_ACTIVE_STATE', 'dry_run' => $dryRun];
+        }
+
+        $current = (string) $state->active_graph_version_uuid;
+        if ($current === $targetVersionUuid) {
+            return [
+                'status' => 'already_active',
+                'graph_version_uuid' => $targetVersionUuid,
+                'dry_run' => $dryRun,
+                'reason' => $reason,
+            ];
+        }
+
+        if ($dryRun) {
+            return [
+                'status' => 'dry_run_ok',
+                'from' => $current,
+                'to' => $targetVersionUuid,
+                'reason' => $reason,
+                'dry_run' => true,
+                'production_mutation' => false,
+            ];
+        }
+
+        return $this->db->transaction(function () use ($target, $targetVersionUuid, $community, $current, $reason) {
+            $state = $this->db->table('flatrate_wiki_projection_state')
+                ->where('community_uuid', $community)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$state || (string) $state->active_graph_version_uuid !== $current) {
+                return [
+                    'status' => 'reject',
+                    'reason' => 'ACTIVE_CHANGED',
+                    'active_graph_unchanged' => true,
+                ];
+            }
+
+            $now = date('Y-m-d H:i:s');
+            $updated = $this->db->table('flatrate_wiki_projection_state')
+                ->where('community_uuid', $community)
+                ->where('active_graph_version_uuid', $current)
+                ->update([
+                    'active_graph_version_uuid' => $targetVersionUuid,
+                    'active_generation' => (int) $target->generation,
+                    'activated_at' => $now,
+                    'updated_at' => $now,
+                ]);
+
+            if ($updated !== 1) {
+                return [
+                    'status' => 'reject',
+                    'reason' => 'ROLLBACK_RACE',
+                    'active_graph_unchanged' => true,
+                ];
+            }
+
+            $this->db->table('flatrate_wiki_graph_versions')
+                ->where('graph_version_uuid', $current)
+                ->update(['status' => 'superseded']);
+
+            $this->db->table('flatrate_wiki_graph_versions')
+                ->where('graph_version_uuid', $targetVersionUuid)
+                ->update([
+                    'status' => 'active',
+                    'activated_at' => $now,
+                ]);
+
+            return [
+                'status' => 'rolled_back',
+                'from' => $current,
+                'to' => $targetVersionUuid,
+                'reason' => $reason,
+                'dry_run' => false,
+                'remote_rollback_api' => false,
             ];
         });
     }
