@@ -9,6 +9,7 @@ WIKI-001C=PASS
 WIKI-001D=PASS
 WIKI-001E=PASS
 WIKI-001F=PASS_SOURCE_QUALIFIED
+WIKI-001P0=IN_PROGRESS
 PRODUCTION_INSTALL=false
 PUBLIC_ROLLOUT=false
 ```
@@ -19,7 +20,8 @@ PUBLIC_ROLLOUT=false
 - Fail-closed feature gate defaults (including admin ghost preview + public rollout)
 - Prefix-aware migration definitions (9 migrations)
 - Projection HMAC/nonce/route contract helpers
-- Projection stage/chunk/validate/activate service skeleton + API routes
+- Projection stage/chunk/validate/activate with scope+ancestor materialization + integrity validation
+- Projection reconcile CLI (read-only) + rollback CLI (default dry-run; `--execute` required)
 - Wiki-scope filter registration (`filter[wiki-scope]`)
 - WIKI-001D primary context + bounded relevance persistence
 - WIKI-001D optimistic revision / 409 correction path
@@ -45,13 +47,20 @@ PUBLIC_ROLLOUT=false
 
 ## SKELETON_ONLY
 
-- Full projection chunk row materialization into scope/ancestor tables
-- Full validate integrity (board bindings, catch-all invariants, reconstruct digest)
-- Activation reconciliation reporting
-- Operator rollback transaction
 - Root backfill apply path
 - Preview-accept fixtures/validation
 - Ghost-preview audience-simulated query execution
+- Route-alias row materialization (no alias table migration yet; non-empty alias chunks fail closed)
+
+## WIKI-001P0 projection runtime (in progress on feat/wiki001p0-projection-runtime-r1)
+
+```text
+PROJECTION_CHUNK_MATERIALIZE=IMPLEMENTED
+PROJECTION_VALIDATE_INTEGRITY=IMPLEMENTED
+PROJECTION_ACTIVATE_RECONCILE_REPORT=IMPLEMENTED
+PROJECTION_RECONCILE_CLI=IMPLEMENTED
+PROJECTION_ROLLBACK_CLI=IMPLEMENTED (requires --execute; default dry-run)
+```
 
 ## DEFERRED
 

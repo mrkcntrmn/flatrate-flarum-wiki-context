@@ -2,6 +2,7 @@
 
 namespace FlatRate\WikiContext\Command;
 
+use FlatRate\WikiContext\Projection\ProjectionService;
 use Flarum\Console\AbstractCommand;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
@@ -11,13 +12,19 @@ use Symfony\Component\Console\Input\InputOption;
  */
 final class ProjectionRollbackCommand extends AbstractCommand
 {
+    public function __construct(private ProjectionService $projection)
+    {
+        parent::__construct();
+    }
+
     protected function configure(): void
     {
         $this->setName('flatrate:wiki:projection-rollback')
             ->setDescription('Operator CLI rollback to a historical accepted graph version.')
             ->addArgument('version', InputArgument::REQUIRED, 'Target graph_version_uuid')
             ->addOption('reason', null, InputOption::VALUE_REQUIRED, 'Operator reason', 'unspecified')
-            ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Report without switching');
+            ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Report without switching')
+            ->addOption('execute', null, InputOption::VALUE_NONE, 'Perform the pointer switch (required for non-dry-run)');
     }
 
     protected function fire(): void
@@ -26,15 +33,28 @@ final class ProjectionRollbackCommand extends AbstractCommand
         $reason = (string) $this->input->getOption('reason');
         $dryRun = (bool) $this->input->getOption('dry-run');
 
-        $this->info('projection_rollback=SKELETON_ONLY');
+        // Default to dry-run unless operator explicitly omits --dry-run AND passes --execute.
+        // Keep fail-closed: without --execute, always dry-run even if --dry-run omitted.
+        $execute = (bool) $this->input->getOption('execute');
+        $effectiveDryRun = $dryRun || !$execute;
+
+        $result = $this->projection->rollback($version, $reason, $effectiveDryRun);
+
+        $this->info('projection_rollback=IMPLEMENTED');
         $this->info('target_version=' . $version);
         $this->info('reason=' . $reason);
-        $this->info('dry_run=' . ($dryRun ? 'true' : 'false'));
+        $this->info('dry_run=' . ($effectiveDryRun ? 'true' : 'false'));
         $this->info('remote_rollback_api=false');
-        $this->error('IMPLEMENTATION_STATE=deferred_full_rollback_transaction');
-        // Fail closed for non-dry-run until fixtures exist.
-        if (!$dryRun) {
-            throw new \RuntimeException('projection_rollback_not_implemented_in_r1');
+        $this->info('status=' . ($result['status'] ?? 'unknown'));
+
+        if (($result['status'] ?? '') === 'reject') {
+            $this->error('reason=' . ($result['reason'] ?? 'unknown'));
+            throw new \RuntimeException('projection_rollback_rejected');
+        }
+
+        if (!$effectiveDryRun) {
+            $this->info('from=' . ($result['from'] ?? ''));
+            $this->info('to=' . ($result['to'] ?? ''));
         }
     }
 }
