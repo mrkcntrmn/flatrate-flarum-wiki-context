@@ -100,8 +100,19 @@ final class PreviewStatusControllerTest extends TestCase
 
     private function request(User $actor)
     {
+        $session = new class ($actor) {
+            public function __construct(private User $actor)
+            {
+            }
+
+            public function getActor(): User
+            {
+                return $this->actor;
+            }
+        };
+
         return (new ServerRequestFactory())
             ->createServerRequest('GET', '/api/flatrate-wiki/preview/status')
-            ->withAttribute('actor', $actor);
+            ->withAttribute('session', $session);
     }
 }
