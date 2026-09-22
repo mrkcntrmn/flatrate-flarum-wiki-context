@@ -5,6 +5,7 @@ namespace FlatRate\WikiContext\Tests\Unit;
 use FlatRate\WikiContext\Api\Controllers\PreviewStatusController;
 use FlatRate\WikiContext\Preview\PreviewAuthorization;
 use FlatRate\WikiContext\Support\FeatureGates;
+use Flarum\Http\RequestUtil;
 use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\User;
 use Laminas\Diactoros\ServerRequestFactory;
@@ -100,19 +101,10 @@ final class PreviewStatusControllerTest extends TestCase
 
     private function request(User $actor)
     {
-        $session = new class ($actor) {
-            public function __construct(private User $actor)
-            {
-            }
+        $request = (new ServerRequestFactory())
+            ->createServerRequest('GET', '/api/flatrate-wiki/preview/status');
 
-            public function getActor(): User
-            {
-                return $this->actor;
-            }
-        };
-
-        return (new ServerRequestFactory())
-            ->createServerRequest('GET', '/api/flatrate-wiki/preview/status')
-            ->withAttribute('session', $session);
+        return RequestUtil::withActor($request, $actor);
     }
 }
+
