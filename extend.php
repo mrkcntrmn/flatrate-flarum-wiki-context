@@ -19,6 +19,7 @@ use FlatRate\WikiContext\Api\Controllers\ProjectionActivateController;
 use FlatRate\WikiContext\Api\Controllers\ProjectionChunkController;
 use FlatRate\WikiContext\Api\Controllers\ProjectionStageController;
 use FlatRate\WikiContext\Api\Controllers\ProjectionValidateController;
+use FlatRate\WikiContext\Api\Controllers\PreviewStatusController;
 use FlatRate\WikiContext\Api\Controllers\ScopeChildrenController;
 use FlatRate\WikiContext\Api\Controllers\ScopeResolveController;
 use FlatRate\WikiContext\Api\Controllers\ScopeSearchController;
@@ -74,6 +75,7 @@ return [
 
     (new Extend\Routes('api'))
         // Static paths before /scopes/{id} so "search"/"resolve" are never treated as UUIDs.
+        ->get('/flatrate-wiki/preview/status', 'flatrate.wiki.preview.status', PreviewStatusController::class)
         ->get('/flatrate-wiki/scopes/search', 'flatrate.wiki.scopes.search', ScopeSearchController::class)
         ->get('/flatrate-wiki/scopes/resolve', 'flatrate.wiki.scopes.resolve', ScopeResolveController::class)
         ->get('/flatrate-wiki/scopes/{id}', 'flatrate.wiki.scopes.show', ScopeShowController::class)

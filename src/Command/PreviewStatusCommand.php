@@ -26,7 +26,9 @@ final class PreviewStatusCommand extends AbstractCommand
         $this->info('public_rollout_enabled=' . ($this->settings->get(FeatureGates::PUBLIC_ROLLOUT_ENABLED) ? 'true' : 'false'));
         $this->info('default_audience=' . GhostPreviewPolicy::DEFAULT_AUDIENCE);
         $this->info('admin_elevated_visibility_for_user_preview=false');
-        $this->info('acceptance_receipt=SKELETON_ONLY');
+        $this->info('server_preview_authorization=ADMIN_ONLY');
+        $this->info('preview_status_api=/api/flatrate-wiki/preview/status');
+        $this->info('acceptance_receipt=P1B_NOT_IMPLEMENTED');
         $this->info('PRODUCTION_MUTATION=false');
     }
 }
