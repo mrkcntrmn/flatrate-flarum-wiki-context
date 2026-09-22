@@ -27,14 +27,17 @@ final class GhostPreviewPolicyTest extends TestCase
     {
         $current = [
             'active_graph_version_uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-            'extension_build_id' => 'build-1',
-            'wiki_contract_version' => 'v1',
-            'directory_display_policy_digest' => 'digest-1',
+            'extension_build_id' => \FlatRate\WikiContext\Support\WikiBuild::BUILD_ID,
+            'wiki_contract_version' => \FlatRate\WikiContext\Support\WikiContract::VERSION,
+            'directory_display_policy_digest' => \FlatRate\WikiContext\Support\DirectoryDisplayPolicy::digest(),
         ];
         $receipt = array_merge($current, ['status' => 'PASS']);
         $this->assertTrue(PreviewAcceptance::isFresh($receipt, $current));
         $stale = $receipt;
-        $stale['extension_build_id'] = 'build-2';
+        $stale['extension_build_id'] = 'build-changed';
         $this->assertFalse(PreviewAcceptance::isFresh($stale, $current));
+        $staleContract = $receipt;
+        $staleContract['wiki_contract_version'] = 'contract-changed';
+        $this->assertFalse(PreviewAcceptance::isFresh($staleContract, $current));
     }
 }

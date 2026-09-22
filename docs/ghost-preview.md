@@ -19,6 +19,9 @@ PUBLIC_ROLLOUT=false
 Preview must use the same browse/directory/breadcrumb/filter/feed-row/context UI as public mode.
 Mode changes authorization/audience/mutation capability — not a parallel fake renderer.
 
+P1B source qualification proves **server/query semantics** only.
+`SAME_USER_COMPONENT_PATH` / browser rendering acceptance remain production ghost-preview acceptance.
+
 ## Audience simulation
 
 Profiles: `guest`, `standard_member` (default).
@@ -31,14 +34,23 @@ Dry-run validation endpoint allowed.
 
 ## Acceptance receipt
 
-Public rollout requires a fresh PASS receipt bound to active graph, build, contract, and display-policy digest.
+Public rollout requires a fresh PASS receipt bound to:
 
+```text
+active_graph_version_uuid
+extension_build_id          (WikiBuild::BUILD_ID)
+wiki_contract_version       (WikiContract::VERSION)
+directory_display_policy_digest
+audience_profiles_verified
+fixture_results_digest
+```
+
+`PublicRolloutPolicy::assertFreshAcceptance()` rejects missing / non-PASS / stale bindings.
+There is no public-rollout mutation API in P1B; future enablement must call that policy.
 
 ## Source completion split
 
-WIKI-001P1 is deliberately split so secure preview entry is qualified before acceptance persistence.
-
-### P1A — admin authorization + status boundary
+### P1A — admin authorization + status boundary — SOURCE MERGED
 
 ```text
 SERVER_PREVIEW_AUTH=ADMIN_ONLY
@@ -50,24 +62,19 @@ READ_ONLY=true
 ACCEPTANCE_RECEIPT_CREATION=false
 ```
 
-The status API is an operational control surface only. It does not render a parallel
-preview implementation, activate a projection, expose ordinary /browse routes, or
-create a PASS receipt.
-
-### P1B — required before production preview acceptance
-
-Still required:
+### P1B — fixtures + receipt + freshness policy — THIS TRANCHE
 
 ```text
-guest + standard_member audience-simulated real query execution
-required fixture runner
-dry-run context validation
-fixture results digest
-real acceptance receipt persistence
-active graph/build/contract/display-policy binding
-freshness/staleness enforcement against persisted receipt
-public rollout rejection when receipt is missing/stale
+ACCEPT_API=POST /api/flatrate-wiki/preview/accept
+CLI=flatrate:wiki:preview-accept --accepted-by=<ADMIN_USER_ID>
+SHARED_SERVICE=PreviewAcceptanceService
+FIXTURE_RUNNER=guest+standard_member
+RECEIPT_PERSISTENCE=PASS_ONLY_AFTER_TOTAL_SUCCESS
+PUBLIC_ROLLOUT_POLICY=PublicRolloutPolicy::assertFreshAcceptance
+SAME_USER_COMPONENT_PATH_CLAIMED=false
+PRODUCTION_MUTATION=false
+PRODUCTION_GHOST_PREVIEW_ACCEPTANCE=false
 ```
 
-Public rollout remains unauthorized until P1B and production ghost-preview
-acceptance both pass.
+Both API and CLI call one shared `PreviewAcceptanceService`.
+CLI is not a logged-in browser actor; it requires an explicit verified admin user ID.

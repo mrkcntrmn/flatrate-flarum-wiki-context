@@ -14,9 +14,9 @@
   ],
   "discussions": [
     {"id": "deep_toyota_primary", "primary": ["Toyota", "Camry", "XV70", "2021", "Brakes", "Front Brake Pads"], "relevance": []},
-    {"id": "labor_law_relevant_toyota", "primary": ["Labor Law"], "relevance": [["Toyota"]]},
+    {"id": "labor_law_relevant_toyota", "primary": ["Labor Law", "Texas", "Flat-Rate Compensation"], "relevance": [["Toyota"]]},
     {"id": "labor_law_relevant_camry", "primary": ["Labor Law"], "relevance": [["Toyota", "Camry"]]},
-    {"id": "hidden_labor_law_relevant_toyota", "primary": ["Labor Law"], "relevance": [["Toyota"]], "hidden": true},
+    {"id": "hidden_labor_law_relevant_toyota", "primary": ["Labor Law", "Texas", "Flat-Rate Compensation"], "relevance": [["Toyota"]], "hidden": true},
     {"id": "duplicate_membership_defense", "primary": ["Toyota"], "relevance": [["Toyota"]], "expect_once": true}
   ],
   "preview_fixtures": [
