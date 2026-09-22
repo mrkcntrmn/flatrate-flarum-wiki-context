@@ -17,5 +17,8 @@ final class DirectoryDisplayPolicyTest extends TestCase
         $this->assertSame(18, $c['mobile']['inline_max']);
         $this->assertSame(1, $c['catch_all']['max_active_per_parent']);
         $this->assertTrue($c['catch_all']['overflow_does_not_use_misc']);
+        $digest = DirectoryDisplayPolicy::digest();
+        $this->assertSame($digest, DirectoryDisplayPolicy::digest());
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $digest);
     }
 }

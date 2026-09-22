@@ -29,7 +29,9 @@ final class ExtendRegistrationTest extends TestCase
         $this->assertStringContainsString("->default(FeatureGates::PUBLIC_ROLLOUT_ENABLED, '0')", $extend);
         $this->assertStringContainsString('flatrate.wiki.projection.stage', $extend);
         $this->assertStringContainsString("->get('/flatrate-wiki/preview/status'", $extend);
+        $this->assertStringContainsString("->post('/flatrate-wiki/preview/accept'", $extend);
         $this->assertStringContainsString('PreviewStatusController::class', $extend);
+        $this->assertStringContainsString('PreviewAcceptController::class', $extend);
         $this->assertStringContainsString('WikiScopeFilter::class', $extend);
         $this->assertStringNotContainsString('Extend\\ApiResource', $extend);
         $this->assertStringContainsString("->get('/flatrate-wiki/scopes/{id}'", $extend);
@@ -57,6 +59,7 @@ final class ExtendRegistrationTest extends TestCase
         echo "WIKI001D_CREATE_CAPTURE_REGISTRATION=PASS\n";
         echo "WIKI001D_STARTED_PERSIST_REGISTRATION=PASS\n";
         echo "WIKI001P1A_PREVIEW_STATUS_ROUTE=PASS\n";
+        echo "WIKI001P1B_PREVIEW_ACCEPT_ROUTE=PASS\n";
         echo "EXTEND_REGISTRATION=PASS\n";
     }
 

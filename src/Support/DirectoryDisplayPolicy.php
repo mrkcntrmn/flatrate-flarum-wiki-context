@@ -42,4 +42,49 @@ final class DirectoryDisplayPolicy
             ],
         ];
     }
+
+    /**
+     * Deterministic SHA-256 digest over a canonical JSON encoding of contract().
+     */
+    public static function digest(): string
+    {
+        return hash('sha256', self::canonicalJson(self::contract()));
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private static function canonicalJson($value): string
+    {
+        if (is_array($value)) {
+            if (self::isList($value)) {
+                $encoded = [];
+                foreach ($value as $item) {
+                    $encoded[] = json_decode(self::canonicalJson($item), true);
+                }
+
+                return json_encode($encoded, JSON_UNESCAPED_SLASHES);
+            }
+
+            $keys = array_keys($value);
+            sort($keys, SORT_STRING);
+            $object = [];
+            foreach ($keys as $key) {
+                $object[$key] = json_decode(self::canonicalJson($value[$key]), true);
+            }
+
+            return json_encode($object, JSON_UNESCAPED_SLASHES);
+        }
+
+        return json_encode($value, JSON_UNESCAPED_SLASHES);
+    }
+
+    private static function isList(array $value): bool
+    {
+        if ($value === []) {
+            return true;
+        }
+
+        return array_keys($value) === range(0, count($value) - 1);
+    }
 }

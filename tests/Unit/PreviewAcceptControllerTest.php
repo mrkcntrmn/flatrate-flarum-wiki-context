@@ -2,7 +2,7 @@
 
 namespace FlatRate\WikiContext\Tests\Unit;
 
-use FlatRate\WikiContext\Api\Controllers\PreviewStatusController;
+use FlatRate\WikiContext\Api\Controllers\PreviewAcceptController;
 use FlatRate\WikiContext\Preview\PreviewAcceptanceRepository;
 use FlatRate\WikiContext\Preview\PreviewAcceptanceService;
 use FlatRate\WikiContext\Preview\PreviewAudienceFactory;
@@ -20,8 +20,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Laminas\Diactoros\ServerRequestFactory;
 use PHPUnit\Framework\TestCase;
 
-final class PreviewStatusControllerTest extends TestCase
+final class PreviewAcceptControllerTest extends TestCase
 {
+    private const COMMUNITY = '11111111-1111-4111-8111-111111111111';
+    private const GRAPH = '22222222-2222-4222-8222-222222222222';
+
     private ConnectionInterface $db;
 
     protected function setUp(): void
@@ -52,80 +55,50 @@ final class PreviewStatusControllerTest extends TestCase
             $table->string('fixture_results_digest', 128);
             $table->string('status', 32);
         });
+        $this->db->table('flatrate_wiki_projection_state')->insert([
+            'community_uuid' => self::COMMUNITY,
+            'active_graph_version_uuid' => self::GRAPH,
+        ]);
     }
 
-    public function test_guest_and_member_are_denied_server_side(): void
+    public function test_non_admin_is_denied(): void
     {
-        foreach ([
-            $this->actor(null, false),
-            $this->actor(42, false),
-        ] as $actor) {
-            $response = $this->controller(true, false, false)->handle(
-                $this->request($actor)
-            );
-
-            $this->assertSame(403, $response->getStatusCode());
-            $this->assertSame('no-store', $response->getHeaderLine('Cache-Control'));
-            $this->assertSame('noindex, nofollow', $response->getHeaderLine('X-Robots-Tag'));
-        }
-
-        echo "WIKI001P1A_NON_ADMIN_PREVIEW_DENIED=PASS\n";
+        $response = $this->controller(true)->handle(
+            $this->request($this->actor(9, false))
+        );
+        $this->assertSame(403, $response->getStatusCode());
+        echo "ADMIN_REQUIRED=PASS\n";
     }
 
-    public function test_admin_fails_closed_when_preview_gate_is_off(): void
+    public function test_admin_accept_success_path(): void
     {
-        $response = $this->controller(false, false, false)->handle(
+        $response = $this->controller(true)->handle(
             $this->request($this->actor(1, true))
         );
-
-        $this->assertSame(404, $response->getStatusCode());
-        $body = json_decode((string) $response->getBody(), true);
-        $this->assertSame('wiki_preview_closed', $body['errors'][0]['code']);
-    }
-
-    public function test_admin_status_is_read_only_and_reports_receipt_summary(): void
-    {
-        $response = $this->controller(true, false, false)->handle(
-            $this->request($this->actor(1, true))
-        );
-
         $this->assertSame(200, $response->getStatusCode());
         $body = json_decode((string) $response->getBody(), true);
-
         $this->assertTrue($body['ok']);
-        $this->assertSame('admin_ghost_preview', $body['mode']);
-        $this->assertTrue($body['read_only']);
-        $this->assertSame(['guest', 'standard_member'], $body['audience_profiles']);
-        $this->assertSame('standard_member', $body['default_audience']);
-        $this->assertFalse($body['admin_elevated_visibility_for_user_preview']);
-        $this->assertFalse($body['public_rollout_enabled']);
-        $this->assertFalse($body['browse_routes_enabled']);
-        $this->assertFalse($body['mutations']['discussion_create']);
-        $this->assertFalse($body['mutations']['context_write']);
-        $this->assertFalse($body['mutations']['relevance_write']);
-        $this->assertFalse($body['mutations']['projection_activation']);
-        $this->assertFalse($body['mutations']['moderation_mutation']);
-        $this->assertTrue($body['acceptance_receipt']['creation_supported']);
-        $this->assertFalse($body['acceptance_receipt']['fresh']);
-        $this->assertNull($body['acceptance_receipt']['latest_pass']);
         $this->assertFalse($body['same_user_component_path_claimed']);
-        $this->assertFalse($body['production_mutation']);
-
-        echo "WIKI001P1A_ADMIN_STATUS_READ_ONLY=PASS\n";
-        echo "WIKI001P1A_PUBLIC_BROWSE_REMAINS_CLOSED=PASS\n";
-        echo "WIKI001P1B_STATUS_RECEIPT_SUMMARY=PASS\n";
+        $this->assertSame('PASS', $body['receipt']['status']);
+        $this->assertSame(1, $this->db->table('flatrate_wiki_preview_acceptance')->count());
     }
 
-    private function controller(bool $preview, bool $public, bool $browse): PreviewStatusController
+    public function test_accept_fails_closed_when_preview_gate_off(): void
+    {
+        $response = $this->controller(false)->handle(
+            $this->request($this->actor(1, true))
+        );
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertSame(0, $this->db->table('flatrate_wiki_preview_acceptance')->count());
+    }
+
+    private function controller(bool $preview): PreviewAcceptController
     {
         $settings = $this->createMock(SettingsRepositoryInterface::class);
-        $values = [
-            FeatureGates::ADMIN_GHOST_PREVIEW_ENABLED => $preview ? '1' : '0',
-            FeatureGates::PUBLIC_ROLLOUT_ENABLED => $public ? '1' : '0',
-            FeatureGates::BROWSE_ROUTES_ENABLED => $browse ? '1' : '0',
-        ];
         $settings->method('get')->willReturnCallback(
-            fn (string $key, $default = null) => $values[$key] ?? $default
+            fn (string $key, $default = null) => $key === FeatureGates::ADMIN_GHOST_PREVIEW_ENABLED
+                ? ($preview ? '1' : '0')
+                : $default
         );
 
         $service = new PreviewAcceptanceService(
@@ -139,10 +112,10 @@ final class PreviewStatusControllerTest extends TestCase
             new PreviewAcceptanceRepository($this->db)
         );
 
-        return new PreviewStatusController($settings, new PreviewAuthorization(), $service);
+        return new PreviewAcceptController($settings, new PreviewAuthorization(), $service);
     }
 
-    private function actor(?int $id, bool $admin): User
+    private function actor(int $id, bool $admin): User
     {
         $actor = $this->getMockBuilder(User::class)
             ->disableOriginalConstructor()
@@ -157,7 +130,7 @@ final class PreviewStatusControllerTest extends TestCase
     private function request(User $actor)
     {
         $request = (new ServerRequestFactory())
-            ->createServerRequest('GET', '/api/flatrate-wiki/preview/status');
+            ->createServerRequest('POST', '/api/flatrate-wiki/preview/accept');
 
         return RequestUtil::withActor($request, $actor);
     }
